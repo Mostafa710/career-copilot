@@ -314,6 +314,11 @@ export default function CareerCopilotApp() {
   };
 
   const handleTailorApplication = async (job: any) => {
+    if (!activeCV) {
+      alert("Please upload and analyze your CV in the 'CV Analysis' tab first before tailoring applications!");
+      setActiveTab("cv");
+      return;
+    }
     setSelectedJob(job);
     setActiveTab("tailor");
     setTailorLoading(true);
@@ -326,6 +331,10 @@ export default function CareerCopilotApp() {
       if (res.ok) {
         const data = await res.json();
         setTailoredApp(data);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.detail || "Please upload and analyze your CV in the 'CV Analysis' tab first.");
+        setActiveTab("cv");
       }
     } catch (err) {
       console.error("Tailor error:", err);

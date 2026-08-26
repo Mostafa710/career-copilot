@@ -21,11 +21,17 @@ class TailorRequest(BaseModel):
 class SaveApplicationRequest(BaseModel):
     job_id: uuid.UUID
     status: Optional[str] = "Tailored"
-    tailored_cv_data: Dict[str, Any]
-    cover_letter: str
-    cold_email: str
+    tailored_cv_data: Optional[Dict[str, Any]] = None
+    cover_letter: Optional[str] = None
+    cold_email: Optional[str] = None
     ats_score_before: Optional[float] = None
     ats_score_after: Optional[float] = None
+    notes: Optional[str] = None
+
+
+class SaveJobRequest(BaseModel):
+    job_id: uuid.UUID
+    status: Optional[str] = "Saved"
     notes: Optional[str] = None
 
 
@@ -34,9 +40,22 @@ class StatusUpdateRequest(BaseModel):
     notes: Optional[str] = None
 
 
-class ExportRequest(BaseModel):
+class ExportCVRequest(BaseModel):
     tailored_cv_data: Dict[str, Any]
     candidate_name: Optional[str] = "Candidate"
+
+
+class ExportCoverLetterRequest(BaseModel):
+    cover_letter: str
+    candidate_name: Optional[str] = "Candidate"
+    job_title: Optional[str] = ""
+    company_name: Optional[str] = ""
+
+
+class ExportEmailRequest(BaseModel):
+    cold_email: str
+    job_title: Optional[str] = ""
+    company_name: Optional[str] = ""
 
 
 @router.post("/tailor")
@@ -46,8 +65,8 @@ async def tailor_application_for_job(
     db: Session = Depends(get_db),
 ):
     """
-    Generate tailored CV bullet points, cover letter, and cold email.
-    Executes Fact-Check Critic reflection loop (up to 2 retries / 3 attempts) to eliminate hallucinations.
+    Generate complete tailored CV, personalized cover letter, and cold outreach email.
+    Executes Fact-Check Critic reflection loop to eliminate hallucinations.
     """
     if not user.profile or not user.profile.parsed_data:
         raise HTTPException(
@@ -88,6 +107,45 @@ async def tailor_application_for_job(
     }
 
 
+@router.post("/save-job")
+def save_job_to_crm(
+    req: SaveJobRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Save a job listing from Job Matcher directly into the Mini-CRM (Saved column)."""
+    job = db.query(Job).filter(Job.id == req.job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    app = db.query(Application).filter(
+        Application.user_id == user.id,
+        Application.job_id == req.job_id,
+    ).first()
+
+    if not app:
+        app = Application(
+            user_id=user.id,
+            job_id=req.job_id,
+            status=req.status or "Saved",
+            notes=req.notes,
+        )
+        db.add(app)
+    else:
+        app.status = req.status or app.status
+        if req.notes:
+            app.notes = req.notes
+
+    db.commit()
+    db.refresh(app)
+
+    return {
+        "status": "success",
+        "application_id": str(app.id),
+        "crm_status": app.status,
+    }
+
+
 @router.post("/save-crm")
 def save_application_to_crm(
     req: SaveApplicationRequest,
@@ -112,12 +170,18 @@ def save_application_to_crm(
         db.add(app)
 
     app.status = req.status or "Tailored"
-    app.tailored_cv_data = req.tailored_cv_data
-    app.cover_letter = req.cover_letter
-    app.cold_email = req.cold_email
-    app.ats_score_before = req.ats_score_before
-    app.ats_score_after = req.ats_score_after
-    app.notes = req.notes
+    if req.tailored_cv_data is not None:
+        app.tailored_cv_data = req.tailored_cv_data
+    if req.cover_letter is not None:
+        app.cover_letter = req.cover_letter
+    if req.cold_email is not None:
+        app.cold_email = req.cold_email
+    if req.ats_score_before is not None:
+        app.ats_score_before = req.ats_score_before
+    if req.ats_score_after is not None:
+        app.ats_score_after = req.ats_score_after
+    if req.notes is not None:
+        app.notes = req.notes
 
     db.commit()
     db.refresh(app)
@@ -148,15 +212,55 @@ def get_crm_applications(
             "location": job.location if job else "Remote",
             "salary_min": job.salary_min if job else None,
             "salary_max": job.salary_max if job else None,
+            "description": job.description if job else "",
+            "redirect_url": job.redirect_url if job else "",
             "status": a.status,
+            "notes": a.notes,
             "ats_score_before": a.ats_score_before,
             "ats_score_after": a.ats_score_after,
             "has_tailored_cv": bool(a.tailored_cv_data),
             "has_cover_letter": bool(a.cover_letter),
             "has_cold_email": bool(a.cold_email),
+            "tailored_cv_data": a.tailored_cv_data,
+            "cover_letter": a.cover_letter,
+            "cold_email": a.cold_email,
             "updated_at": a.updated_at.isoformat() if a.updated_at else None,
         })
     return {"status": "success", "count": len(results), "applications": results}
+
+
+@router.get("/crm/{app_id}")
+def get_crm_application_details(
+    app_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Retrieve full details of a specific application from Mini-CRM."""
+    app = db.query(Application).filter(
+        Application.id == app_id,
+        Application.user_id == user.id,
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found.")
+
+    job = app.job
+    return {
+        "id": str(app.id),
+        "job_id": str(app.job_id),
+        "title": job.title if job else "",
+        "company": job.company if job else "",
+        "location": job.location if job else "",
+        "description": job.description if job else "",
+        "status": app.status,
+        "notes": app.notes,
+        "ats_score_before": app.ats_score_before,
+        "ats_score_after": app.ats_score_after,
+        "tailored_cv_data": app.tailored_cv_data,
+        "cover_letter": app.cover_letter,
+        "cold_email": app.cold_email,
+        "updated_at": app.updated_at.isoformat() if app.updated_at else None,
+    }
 
 
 @router.patch("/crm/{app_id}/status")
@@ -183,26 +287,80 @@ def update_application_status(
     return {"status": "success", "application_id": str(app.id), "new_status": app.status}
 
 
-@router.post("/export/docx")
-def export_tailored_docx(
-    req: ExportRequest,
+@router.delete("/crm/{app_id}")
+def delete_crm_application(
+    app_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove an application entry from the Mini-CRM."""
+    app = db.query(Application).filter(
+        Application.id == app_id,
+        Application.user_id == user.id,
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail="Application record not found.")
+
+    db.delete(app)
+    db.commit()
+    return {"status": "success", "message": "Application removed from CRM."}
+
+
+@router.post("/export/cv/docx")
+def export_tailored_cv_docx(
+    req: ExportCVRequest,
     user: User = Depends(get_current_user),
 ):
     """Export tailored CV as downloadable Microsoft Word (.docx) file."""
+    candidate_name = req.candidate_name or (user.profile.parsed_data.get("contact_info", {}).get("name") if user.profile else "Candidate")
     docx_bytes = document_exporter.generate_docx_cv(
         tailored_data=req.tailored_cv_data,
-        candidate_name=req.candidate_name or (user.profile.parsed_data.get("contact_info", {}).get("name") if user.profile else "Candidate"),
+        candidate_name=candidate_name,
     )
     return Response(
         content=docx_bytes,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={"Content-Disposition": "attachment; filename=tailored_resume.docx"},
+        headers={"Content-Disposition": f"attachment; filename=Tailored_CV_{candidate_name.replace(' ', '_')}.docx"},
+    )
+
+
+@router.post("/export/cover-letter/docx")
+def export_cover_letter_docx(
+    req: ExportCoverLetterRequest,
+    user: User = Depends(get_current_user),
+):
+    """Export cover letter as downloadable Microsoft Word (.docx) file."""
+    candidate_name = req.candidate_name or (user.profile.parsed_data.get("contact_info", {}).get("name") if user.profile else "Candidate")
+    docx_bytes = document_exporter.generate_docx_cover_letter(
+        cover_letter_text=req.cover_letter,
+        candidate_name=candidate_name,
+        job_title=req.job_title or "",
+        company_name=req.company_name or "",
+    )
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename=Cover_Letter_{req.company_name.replace(' ', '_') if req.company_name else 'Job'}.docx"},
+    )
+
+
+@router.post("/export/email/txt")
+def export_cold_email_txt(
+    req: ExportEmailRequest,
+):
+    """Export cold outreach email as a plain text (.txt) file."""
+    text_content = req.cold_email.strip()
+    return Response(
+        content=text_content.encode("utf-8"),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=Cold_Outreach_Email_{req.company_name.replace(' ', '_') if req.company_name else 'Hiring_Manager'}.txt"},
     )
 
 
 @router.post("/export/html")
 def export_tailored_html(
-    req: ExportRequest,
+    req: ExportCVRequest,
     user: User = Depends(get_current_user),
 ):
     """Export tailored CV as semantic HTML for printing and PDF generation."""

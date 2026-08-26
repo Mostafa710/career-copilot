@@ -36,6 +36,9 @@ import {
   StopCircle,
   Eye,
   EyeOff,
+  BookmarkPlus,
+  ExternalLink,
+  Edit3,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api";
@@ -74,8 +77,11 @@ export default function CareerCopilotApp() {
   const [tailoredApp, setTailoredApp] = useState<any>(null);
   const [tailorLoading, setTailorLoading] = useState(false);
 
-  // Mini-CRM State
+  // Mini-CRM State (All 6 Stages)
   const [crmApplications, setCrmApplications] = useState<any[]>([]);
+  const [selectedCRMApp, setSelectedCRMApp] = useState<any>(null);
+  const [crmModalOpen, setCrmModalOpen] = useState(false);
+  const [statusUpdateLoading, setStatusUpdateLoading] = useState(false);
 
   // Mock Interview State (Open-Ended)
   const [interviewType, setInterviewType] = useState("Technical");
@@ -274,6 +280,22 @@ export default function CareerCopilotApp() {
     }
   };
 
+  const handleSaveJobToCRM = async (job: any) => {
+    try {
+      const res = await authFetch("/application/save-job", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job_id: job.id, status: "Saved" }),
+      });
+      if (res.ok) {
+        fetchCRM();
+        alert(`Saved "${job.title}" at ${job.company} to your Mini-CRM!`);
+      }
+    } catch (err) {
+      console.error("Save job error:", err);
+    }
+  };
+
   const handleFetchInsights = async (job: any) => {
     setSelectedJob(job);
     setInsightsLoading(true);
@@ -334,6 +356,124 @@ export default function CareerCopilotApp() {
       }
     } catch (err) {
       console.error("CRM save error:", err);
+    }
+  };
+
+  // Export Download Handlers
+  const handleDownloadCVDocx = async (cvData: any, candidateName = "Candidate") => {
+    try {
+      const res = await authFetch("/application/export/cv/docx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tailored_cv_data: cvData,
+          candidate_name: candidateName,
+        }),
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Tailored_CV_${candidateName.replace(/\s+/g, "_")}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+    } catch (e) {
+      console.error("Export CV error:", e);
+    }
+  };
+
+  const handleDownloadCoverLetterDocx = async (letterText: string, company = "Job", title = "") => {
+    try {
+      const res = await authFetch("/application/export/cover-letter/docx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cover_letter: letterText,
+          company_name: company,
+          job_title: title,
+        }),
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Cover_Letter_${company.replace(/\s+/g, "_")}.docx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+    } catch (e) {
+      console.error("Export Cover Letter error:", e);
+    }
+  };
+
+  const handleDownloadEmailTxt = async (emailText: string, company = "Hiring_Manager") => {
+    try {
+      const res = await authFetch("/application/export/email/txt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cold_email: emailText,
+          company_name: company,
+        }),
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Cold_Email_${company.replace(/\s+/g, "_")}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+    } catch (e) {
+      console.error("Export Email error:", e);
+    }
+  };
+
+  // Mini-CRM Card Click Handler
+  const handleOpenCRMAppDetails = (app: any) => {
+    setSelectedCRMApp(app);
+    setCrmModalOpen(true);
+  };
+
+  const handleUpdateCRMStatus = async (appId: string, newStatus: string) => {
+    setStatusUpdateLoading(true);
+    try {
+      const res = await authFetch(`/application/crm/${appId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) {
+        fetchCRM();
+        if (selectedCRMApp && selectedCRMApp.id === appId) {
+          setSelectedCRMApp((prev: any) => ({ ...prev, status: newStatus }));
+        }
+      }
+    } catch (err) {
+      console.error("Status update error:", err);
+    } finally {
+      setStatusUpdateLoading(false);
+    }
+  };
+
+  const handleDeleteCRMApp = async (appId: string) => {
+    if (confirm("Remove this application from your Mini-CRM?")) {
+      try {
+        const res = await authFetch(`/application/crm/${appId}`, { method: "DELETE" });
+        if (res.ok) {
+          fetchCRM();
+          setCrmModalOpen(false);
+        }
+      } catch (err) {
+        console.error("CRM delete error:", err);
+      }
     }
   };
 
@@ -929,18 +1069,27 @@ export default function CareerCopilotApp() {
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
-                    <button
-                      onClick={() => handleFetchInsights(job)}
-                      className="text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"
-                    >
-                      <Building className="w-3.5 h-3.5" /> Company Insights
-                    </button>
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 gap-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleSaveJobToCRM(job)}
+                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center gap-1"
+                        title="Save Job to Mini-CRM"
+                      >
+                        <BookmarkPlus className="w-3.5 h-3.5 text-indigo-600" /> Save
+                      </button>
+                      <button
+                        onClick={() => handleFetchInsights(job)}
+                        className="text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"
+                      >
+                        <Building className="w-3.5 h-3.5" /> Insights
+                      </button>
+                    </div>
                     <button
                       onClick={() => handleTailorApplication(job)}
                       className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow"
                     >
-                      <Sparkles className="w-3.5 h-3.5" /> Tailor Application
+                      <Sparkles className="w-3.5 h-3.5" /> Tailor Full App
                     </button>
                   </div>
                 </div>
@@ -957,21 +1106,39 @@ export default function CareerCopilotApp() {
           </div>
         )}
 
-        {/* TAB 3: APPLICATION STUDIO */}
+        {/* TAB 3: APPLICATION STUDIO (FULL CV + EXPORTS) */}
         {activeTab === "tailor" && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Application Studio (Fact-Checked)</h1>
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Application Studio (Fact-Checked Full Package)</h1>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Tailored experience, cover letter, and cold email. Verified by Critic against your original CV.
+                  Full tailored CV, personalized cover letter, and hiring manager outreach. Verified by Critic against your original CV.
                 </p>
               </div>
               {tailoredApp && (
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => handleDownloadCVDocx(tailoredApp.tailored_cv_data, activeCV?.parsed_profile?.contact_info?.name || "Candidate")}
+                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5 text-indigo-600" /> CV (DOCX)
+                  </button>
+                  <button
+                    onClick={() => handleDownloadCoverLetterDocx(tailoredApp.cover_letter, selectedJob?.company || "Company", selectedJob?.title || "Role")}
+                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5 text-indigo-600" /> Cover Letter (DOCX)
+                  </button>
+                  <button
+                    onClick={() => handleDownloadEmailTxt(tailoredApp.cold_email, selectedJob?.company || "Hiring_Manager")}
+                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5 text-indigo-600" /> Cold Email (TXT)
+                  </button>
                   <button
                     onClick={handleSaveToCRM}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow"
+                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow"
                   >
                     Save to Mini-CRM
                   </button>
@@ -982,7 +1149,7 @@ export default function CareerCopilotApp() {
             {tailorLoading ? (
               <div className="glass-card py-16 text-center space-y-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                 <RefreshCw className="w-8 h-8 mx-auto animate-spin text-indigo-600" />
-                <p className="text-sm font-bold text-slate-900 dark:text-white">Tailoring application & executing Fact Critic loop...</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">Tailoring full CV & running Fact Critic reflection loop...</p>
                 <p className="text-xs text-slate-400">Verifying zero hallucinations against your original CV.</p>
               </div>
             ) : tailoredApp ? (
@@ -993,7 +1160,7 @@ export default function CareerCopilotApp() {
                     <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                     <div>
                       <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 block">
-                        Fact Critic Validation Passed (Attempt {tailoredApp.critic_attempts})
+                        Fact Critic Validation: {tailoredApp.critic_passed ? "PASSED" : "REVIEWED"} (Attempt {tailoredApp.critic_attempts}/3)
                       </span>
                       <span className="text-xs text-emerald-700 dark:text-emerald-400">
                         100% verified against original experience. Zero invented skills or dates.
@@ -1009,18 +1176,59 @@ export default function CareerCopilotApp() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Tailored Experience */}
+                  {/* Full Tailored CV View */}
                   <div className="glass-card p-5 space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-indigo-600" /> Tailored Experience Bullets
-                    </h3>
-                    <div className="space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-indigo-600" /> Full Tailored CV
+                      </h3>
+                      <button
+                        onClick={() => handleDownloadCVDocx(tailoredApp.tailored_cv_data, activeCV?.parsed_profile?.contact_info?.name || "Candidate")}
+                        className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
+                      >
+                        <Download className="w-3.5 h-3.5" /> Download DOCX
+                      </button>
+                    </div>
+
+                    {/* Tailored Professional Summary */}
+                    {tailoredApp.tailored_cv_data?.professional_summary && (
+                      <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                        <strong className="text-xs font-bold text-slate-900 dark:text-slate-100 block mb-1">
+                          Tailored Professional Summary:
+                        </strong>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                          {tailoredApp.tailored_cv_data.professional_summary}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Highlighted Skills */}
+                    {tailoredApp.tailored_cv_data?.skills?.length > 0 && (
+                      <div>
+                        <strong className="text-xs font-bold text-slate-900 dark:text-slate-100 block mb-1.5">
+                          Targeted Skill Alignment:
+                        </strong>
+                        <div className="flex flex-wrap gap-1">
+                          {tailoredApp.tailored_cv_data.skills.map((s: string, i: number) => (
+                            <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tailored Work Experience */}
+                    <div className="space-y-3">
+                      <strong className="text-xs font-bold text-slate-900 dark:text-slate-100 block">
+                        Work Experience:
+                      </strong>
                       {tailoredApp.tailored_cv_data?.experience?.map((exp: any, i: number) => (
-                        <div key={i} className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                        <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
                           <strong className="text-xs font-bold text-slate-900 dark:text-slate-100">
                             {exp.title} — {exp.company}
                           </strong>
-                          <ul className="mt-2 space-y-1.5 text-xs text-slate-600 dark:text-slate-300 list-disc pl-4">
+                          <ul className="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-300 list-disc pl-4">
                             {exp.bullets?.map((b: string, j: number) => (
                               <li key={j}>{b}</li>
                             ))}
@@ -1028,22 +1236,52 @@ export default function CareerCopilotApp() {
                         </div>
                       ))}
                     </div>
+
+                    {/* Education & Certs */}
+                    {tailoredApp.tailored_cv_data?.education?.length > 0 && (
+                      <div>
+                        <strong className="text-xs font-bold text-slate-900 dark:text-slate-100 block mb-1">
+                          Education & Credentials:
+                        </strong>
+                        {tailoredApp.tailored_cv_data.education.map((edu: any, i: number) => (
+                          <p key={i} className="text-xs text-slate-600 dark:text-slate-400">
+                            • {edu.degree} — {edu.institution} {edu.year ? `(${edu.year})` : ""}
+                          </p>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Cover Letter & Email */}
                   <div className="glass-card p-5 space-y-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                     <div>
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Cover Letter</h3>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Cover Letter</h3>
+                        <button
+                          onClick={() => handleDownloadCoverLetterDocx(tailoredApp.cover_letter, selectedJob?.company || "Company", selectedJob?.title || "Role")}
+                          className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
+                        >
+                          <Download className="w-3.5 h-3.5" /> DOCX
+                        </button>
+                      </div>
                       <textarea
                         value={tailoredApp.cover_letter}
                         onChange={(e) => setTailoredApp({ ...tailoredApp, cover_letter: e.target.value })}
-                        rows={7}
+                        rows={8}
                         className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                       />
                     </div>
 
                     <div>
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Cold Outreach Email</h3>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Cold Outreach Email</h3>
+                        <button
+                          onClick={() => handleDownloadEmailTxt(tailoredApp.cold_email, selectedJob?.company || "Hiring_Manager")}
+                          className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
+                        >
+                          <Download className="w-3.5 h-3.5" /> TXT
+                        </button>
+                      </div>
                       <textarea
                         value={tailoredApp.cold_email}
                         onChange={(e) => setTailoredApp({ ...tailoredApp, cold_email: e.target.value })}
@@ -1057,49 +1295,57 @@ export default function CareerCopilotApp() {
             ) : (
               <div className="glass-card py-16 text-center text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                 <Sparkles className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
-                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Select a job posting in Job Matcher to tailor your application.</p>
+                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Select a job posting in Job Matcher to tailor your full application.</p>
               </div>
             )}
           </div>
         )}
 
-        {/* TAB 4: MINI-CRM */}
+        {/* TAB 4: MINI-CRM (ALL 6 STAGES WITH DETAILS MODAL) */}
         {activeTab === "crm" && (
           <div className="space-y-6">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Application Tracker (Mini-CRM)</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Application Pipeline (Mini-CRM)</h1>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Track your active job applications across all stages.
+                Manage all your saved, tailored, and active applications. Click any card to inspect full JD details or export previously generated tailored documents.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {["Tailored", "Applied", "Interviewing", "Offered"].map((colStatus) => {
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
+              {["Saved", "Tailored", "Applied", "Interviewing", "Offered", "Rejected"].map((colStatus) => {
                 const colApps = crmApplications.filter((a) => a.status === colStatus);
                 return (
-                  <div key={colStatus} className="glass-card p-4 space-y-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">{colStatus}</span>
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800">
-                        {colApps.length}
-                      </span>
-                    </div>
+                  <div key={colStatus} className="glass-card p-3 space-y-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">{colStatus}</span>
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800">
+                          {colApps.length}
+                        </span>
+                      </div>
 
-                    <div className="space-y-3">
-                      {colApps.map((app, i) => (
-                        <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1.5">
-                          <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">{app.title}</h4>
-                          <span className="text-[11px] text-slate-500 block">{app.company}</span>
-                          {app.ats_score_after && (
-                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                              ATS Match: {app.ats_score_after}%
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                      {colApps.length === 0 && (
-                        <p className="text-xs text-slate-400 text-center py-6">No applications in this stage</p>
-                      )}
+                      <div className="space-y-2 mt-3">
+                        {colApps.map((app, i) => (
+                          <div
+                            key={i}
+                            onClick={() => handleOpenCRMAppDetails(app)}
+                            className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-indigo-500 cursor-pointer transition-all space-y-1"
+                          >
+                            <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1">{app.title}</h4>
+                            <span className="text-[11px] text-slate-500 block line-clamp-1">{app.company}</span>
+                            {app.ats_score_after ? (
+                              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 block">
+                                ATS: {app.ats_score_after}%
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 block">Click for details</span>
+                            )}
+                          </div>
+                        ))}
+                        {colApps.length === 0 && (
+                          <p className="text-[11px] text-slate-400 text-center py-6">Empty</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -1338,6 +1584,109 @@ export default function CareerCopilotApp() {
           </div>
         )}
       </main>
+
+      {/* Mini-CRM Job & Application Details Modal */}
+      {crmModalOpen && selectedCRMApp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="glass-card max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 space-y-5 bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800">
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">{selectedCRMApp.title}</h3>
+                <span className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                  <Building className="w-3.5 h-3.5" /> {selectedCRMApp.company} • <MapPin className="w-3.5 h-3.5" /> {selectedCRMApp.location || "Remote"}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDeleteCRMApp(selectedCRMApp.id)}
+                  className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg"
+                  title="Delete Application"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setCrmModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Status Selector */}
+            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Pipeline Stage:</span>
+              <div className="flex flex-wrap gap-1">
+                {["Saved", "Tailored", "Applied", "Interviewing", "Offered", "Rejected"].map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => handleUpdateCRMStatus(selectedCRMApp.id, st)}
+                    disabled={statusUpdateLoading}
+                    className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${
+                      selectedCRMApp.status === st
+                        ? "bg-indigo-600 text-white shadow-sm"
+                        : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100"
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Generated Assets / Exports if Tailored */}
+            {selectedCRMApp.tailored_cv_data && (
+              <div className="p-4 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-indigo-600" /> Previously Generated Application Assets
+                  </span>
+                  {selectedCRMApp.ats_score_after && (
+                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
+                      ATS: {selectedCRMApp.ats_score_after}%
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => handleDownloadCVDocx(selectedCRMApp.tailored_cv_data, activeCV?.parsed_profile?.contact_info?.name || "Candidate")}
+                    className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5 text-indigo-600" /> Tailored CV (DOCX)
+                  </button>
+                  {selectedCRMApp.cover_letter && (
+                    <button
+                      onClick={() => handleDownloadCoverLetterDocx(selectedCRMApp.cover_letter, selectedCRMApp.company, selectedCRMApp.title)}
+                      className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Download className="w-3.5 h-3.5 text-indigo-600" /> Cover Letter (DOCX)
+                    </button>
+                  )}
+                  {selectedCRMApp.cold_email && (
+                    <button
+                      onClick={() => handleDownloadEmailTxt(selectedCRMApp.cold_email, selectedCRMApp.company)}
+                      className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Download className="w-3.5 h-3.5 text-indigo-600" /> Cold Email (TXT)
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Job Description */}
+            <div>
+              <strong className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-1">
+                Job Description
+              </strong>
+              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-200 dark:border-slate-800 max-h-48 overflow-y-auto whitespace-pre-wrap">
+                {selectedCRMApp.description || "No description recorded for this job."}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Company Insights Modal */}
       {insightsModalOpen && (

@@ -13,7 +13,7 @@ class DocumentExporter:
         """Generate a clean, ATS-compliant Word DOCX resume."""
         doc = docx.Document()
 
-        # Set 1-inch margins
+        # Set standard margins
         for section in doc.sections:
             section.top_margin = Inches(0.8)
             section.bottom_margin = Inches(0.8)
@@ -36,6 +36,8 @@ class DocumentExporter:
             contact_parts.append(contact["email"])
         if contact.get("phone"):
             contact_parts.append(contact["phone"])
+        if contact.get("location"):
+            contact_parts.append(contact["location"])
         if contact.get("linkedin_url"):
             contact_parts.append(contact["linkedin_url"])
         if contact.get("github_url"):
@@ -47,7 +49,7 @@ class DocumentExporter:
             contact_run = contact_p.add_run(" | ".join(contact_parts))
             contact_run.font.name = "Arial"
             contact_run.font.size = Pt(9.5)
-            contact_run.font.color.rgb = RGBColor(71, 85, 105)  # Slate-600
+            contact_run.font.color.rgb = RGBColor(71, 85, 105)
 
         # Summary Section
         summary = tailored_data.get("professional_summary")
@@ -110,6 +112,68 @@ class DocumentExporter:
                 e_run.font.name = "Arial"
                 e_run.font.size = Pt(10)
 
+        # Certifications Section
+        certifications = tailored_data.get("certifications", [])
+        if certifications:
+            DocumentExporter._add_section_heading(doc, "CERTIFICATIONS & CREDENTIALS")
+            for cert in certifications:
+                cert_p = doc.add_paragraph(style="List Bullet")
+                c_run = cert_p.add_run(cert if isinstance(cert, str) else str(cert))
+                c_run.font.name = "Arial"
+                c_run.font.size = Pt(9.5)
+
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        return buffer.getvalue()
+
+    @staticmethod
+    def generate_docx_cover_letter(
+        cover_letter_text: str,
+        candidate_name: str = "Candidate",
+        job_title: str = "",
+        company_name: str = "",
+    ) -> bytes:
+        """Generate a professionally formatted Word DOCX cover letter."""
+        doc = docx.Document()
+
+        for section in doc.sections:
+            section.top_margin = Inches(1.0)
+            section.bottom_margin = Inches(1.0)
+            section.left_margin = Inches(1.0)
+            section.right_margin = Inches(1.0)
+
+        # Header: Candidate Name
+        name_p = doc.add_paragraph()
+        name_run = name_p.add_run(candidate_name)
+        name_run.font.name = "Arial"
+        name_run.font.size = Pt(16)
+        name_run.font.bold = True
+        name_run.font.color.rgb = RGBColor(15, 23, 42)
+
+        # Target Reference
+        if job_title or company_name:
+            sub_p = doc.add_paragraph()
+            sub_run = sub_p.add_run(f"Application for: {job_title} | {company_name}")
+            sub_run.font.name = "Arial"
+            sub_run.font.size = Pt(10.5)
+            sub_run.font.italic = True
+            sub_run.font.color.rgb = RGBColor(71, 85, 105)
+
+        divider_p = doc.add_paragraph()
+        divider_p.paragraph_format.space_after = Pt(12)
+
+        # Letter Paragraphs
+        paragraphs = cover_letter_text.strip().split("\n\n")
+        for p_text in paragraphs:
+            if p_text.strip():
+                p = doc.add_paragraph()
+                p.paragraph_format.space_after = Pt(10)
+                p.paragraph_format.line_spacing = 1.15
+                run = p.add_run(p_text.strip())
+                run.font.name = "Arial"
+                run.font.size = Pt(11)
+                run.font.color.rgb = RGBColor(30, 41, 59)
+
         buffer = io.BytesIO()
         doc.save(buffer)
         return buffer.getvalue()
@@ -134,6 +198,16 @@ class DocumentExporter:
             f"<span>{v}</span>" for k, v in contact.items() if v and isinstance(v, str)
         ]
         
+        summary_html = ""
+        summary = tailored_data.get("professional_summary")
+        if summary:
+            summary_html = f"""
+            <section class="section">
+                <h2 class="section-title">Professional Summary</h2>
+                <p class="summary-text">{summary}</p>
+            </section>
+            """
+
         skills_html = ""
         skills = tailored_data.get("skills", [])
         if skills:
@@ -192,6 +266,7 @@ class DocumentExporter:
         <h1 class="name">{candidate_name}</h1>
         <div class="contact">{''.join(contact_items)}</div>
     </div>
+    {summary_html}
     {skills_html}
     {experience_html}
 </body>

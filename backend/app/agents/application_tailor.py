@@ -1,4 +1,4 @@
-"""Application Tailoring Agent: Crafts tailored CV bullet points, cover letters, and emails with Fact-Check Critic reflection loop."""
+"""Application Tailoring Agent: Crafts full tailored CVs, cover letters, and emails with Fact-Check Critic reflection loop."""
 
 import logging
 from typing import Dict, Any, List, Optional
@@ -11,10 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 class TailoredApplicationOutput(BaseModel):
+    tailored_professional_summary: str = Field(..., description="Compelling 2-3 sentence professional summary tailored specifically to the target role without inventing facts")
+    highlighted_skills: List[str] = Field(default_factory=list, description="Candidate's verified skills prioritized and aligned with target JD requirements")
     tailored_experience: List[Dict[str, Any]] = Field(..., description="Tailored experience entries with rephrased bullets emphasizing target JD keywords")
     cover_letter: str = Field(..., description="Professional, personalized cover letter referencing company context")
-    cold_email: str = Field(..., description="Concise, high-impact cold outreach email for hiring manager")
-    highlighted_skills: List[str] = Field(default_factory=list, description="Core verified skills emphasized")
+    cold_email: str = Field(..., description="Concise, high-impact 3-paragraph cold outreach email for hiring manager")
 
 
 class CriticEvaluation(BaseModel):
@@ -25,18 +26,20 @@ class CriticEvaluation(BaseModel):
 
 GENERATOR_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """You are an elite Career Copilot & Resume Strategist.
-Your goal is to tailor the candidate's existing experience to best match the target Job Description (JD).
+Your goal is to tailor the candidate's full resume, cover letter, and cold outreach email to match the target Job Description (JD).
 
 CRITICAL RULES:
-1. NEVER invent or hallucinate new skills, companies, tools, or dates not in the Original CV.
-2. Rephrase, reorder, and emphasize existing achievements to align with JD requirements.
-3. Keep the cover letter compelling, concise, and focused on value proposition.
-4. Craft a direct, 3-paragraph cold outreach email.
+1. NEVER invent or hallucinate new skills, companies, tools, degrees, or metrics absent from the Original CV.
+2. Formulate a strong, targeted Professional Summary based only on verified experience.
+3. Prioritize existing candidate skills that match the JD.
+4. Rephrase, reorder, and emphasize existing experience bullets to highlight relevance to the target JD.
+5. Craft a compelling cover letter and a concise, 3-paragraph cold outreach email.
 {critic_feedback}
 """),
     ("human", """Candidate Original Profile:
 Skills: {candidate_skills}
 Experience: {candidate_experience}
+Education: {candidate_education}
 
 Target Job:
 Title: {job_title}
@@ -51,7 +54,7 @@ CRITIC_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """You are a rigorous Fact-Checking & Anti-Hallucination Critic for resumes.
 Compare the Tailored Application against the Candidate's Original CV.
 Verify that:
-1. The tailored experience does NOT invent technologies, tools, or metrics that were absent from the original CV.
+1. The tailored experience and summary do NOT invent technologies, tools, or metrics that were absent from the original CV.
 2. The candidate's job titles and company names remain strictly accurate.
 3. The cover letter does not claim unverified degrees or credentials.
 
@@ -60,8 +63,9 @@ Output 'passed: true' ONLY if it is 100% truthful to the original CV.
     ("human", """Original CV Skills & Experience:
 {original_cv}
 
-Generated Tailored Experience:
-{tailored_experience}
+Generated Tailored Summary & Experience:
+Summary: {tailored_summary}
+Experience: {tailored_experience}
 
 Generated Cover Letter:
 {cover_letter}
@@ -82,10 +86,14 @@ class ApplicationTailorAgent:
         max_attempts: int = 3,
     ) -> Dict[str, Any]:
         """
-        Executes the Generator-Critic reflection loop to guarantee a truthful, high-match application.
+        Executes the Generator-Critic reflection loop to guarantee a truthful, high-match full application.
         """
         candidate_skills = parsed_cv.get("skills_inventory", [])
         candidate_exp = parsed_cv.get("experience", [])
+        candidate_edu = parsed_cv.get("education", [])
+        candidate_contact = parsed_cv.get("contact_info", {})
+        candidate_certs = parsed_cv.get("certifications", [])
+
         job_title = job.get("title", "")
         company_name = job.get("company", "")
         job_desc = job.get("description", "")
@@ -105,6 +113,7 @@ class ApplicationTailorAgent:
             generated: TailoredApplicationOutput = await gen_chain.ainvoke({
                 "candidate_skills": ", ".join(candidate_skills),
                 "candidate_experience": str(candidate_exp),
+                "candidate_education": str(candidate_edu),
                 "job_title": job_title,
                 "company_name": company_name,
                 "job_description": job_desc,
@@ -119,6 +128,7 @@ class ApplicationTailorAgent:
 
             evaluation: CriticEvaluation = await critic_chain.ainvoke({
                 "original_cv": f"Skills: {', '.join(candidate_skills)}\nExperience: {str(candidate_exp)}",
+                "tailored_summary": generated.tailored_professional_summary,
                 "tailored_experience": str(generated.tailored_experience),
                 "cover_letter": generated.cover_letter,
             })
@@ -140,26 +150,30 @@ class ApplicationTailorAgent:
         )
 
         tailored_bullets = []
-        for exp in last_generated.tailored_experience:
+        for exp in (last_generated.tailored_experience if last_generated else candidate_exp):
             tailored_bullets.extend(exp.get("bullets", []))
 
         tailored_match = compute_job_specific_ats_match(
-            cv_skills=last_generated.highlighted_skills or candidate_skills,
+            cv_skills=(last_generated.highlighted_skills if last_generated and last_generated.highlighted_skills else candidate_skills),
             job_required_skills=required_skills,
             cv_bullets=tailored_bullets,
             job_description=job_desc,
         )
 
+        # Full Tailored CV Object
+        full_tailored_cv = {
+            "contact_info": candidate_contact,
+            "professional_summary": last_generated.tailored_professional_summary if last_generated else f"Targeted candidate for {job_title} at {company_name}.",
+            "skills": last_generated.highlighted_skills if last_generated and last_generated.highlighted_skills else candidate_skills,
+            "experience": last_generated.tailored_experience if last_generated else candidate_exp,
+            "education": candidate_edu,
+            "certifications": candidate_certs,
+        }
+
         return {
-            "tailored_cv_data": {
-                "contact_info": parsed_cv.get("contact_info", {}),
-                "professional_summary": f"Targeted candidate for {job_title} at {company_name}.",
-                "skills": last_generated.highlighted_skills or candidate_skills,
-                "experience": last_generated.tailored_experience,
-                "education": parsed_cv.get("education", []),
-            },
-            "cover_letter": last_generated.cover_letter,
-            "cold_email": last_generated.cold_email,
+            "tailored_cv_data": full_tailored_cv,
+            "cover_letter": last_generated.cover_letter if last_generated else "",
+            "cold_email": last_generated.cold_email if last_generated else "",
             "ats_score_before": original_match["match_score"],
             "ats_score_after": max(tailored_match["match_score"], original_match["match_score"]),
             "critic_attempts": attempt,

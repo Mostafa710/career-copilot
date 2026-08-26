@@ -173,12 +173,23 @@ async def end_interview_session(
 
     job_title = session.job.title if session.job else "Software Engineer"
     history = list(session.conversation_history)
+    candidate_responses = [msg for msg in history if msg.get("role") == "candidate"]
 
-    final_evaluation = await mock_interview_agent.generate_final_scorecard(
-        interview_type=session.interview_type,
-        job_title=job_title,
-        conversation_history=history,
-    )
+    if not candidate_responses:
+        final_evaluation = {
+            "overall_score": 0,
+            "hiring_recommendation": "Needs Improvement",
+            "strengths": ["Initiated mock interview session"],
+            "areas_for_improvement": ["Concluded session before answering any interview questions."],
+            "star_method_assessment": "No candidate responses were submitted for evaluation.",
+            "technical_depth_assessment": "No candidate responses were submitted for evaluation.",
+        }
+    else:
+        final_evaluation = await mock_interview_agent.generate_final_scorecard(
+            interview_type=session.interview_type,
+            job_title=job_title,
+            conversation_history=history,
+        )
 
     session.is_completed = 1
     session.final_evaluation = final_evaluation

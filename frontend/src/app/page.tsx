@@ -552,7 +552,7 @@ export default function CareerCopilotApp() {
   };
 
   const handleEndInterview = async () => {
-    if (!interviewSession) return;
+    if (!interviewSession || endingInterview) return;
     setEndingInterview(true);
     try {
       const res = await authFetch("/interview/end", {
@@ -567,6 +567,9 @@ export default function CareerCopilotApp() {
           is_completed: true,
           final_evaluation: data.final_evaluation,
         }));
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.detail || "Failed to conclude interview.");
       }
     } catch (err) {
       console.error("End interview error:", err);
@@ -1476,13 +1479,14 @@ export default function CareerCopilotApp() {
                     <textarea
                       value={candidateAnswer}
                       onChange={(e) => setCandidateAnswer(e.target.value)}
-                      placeholder="Type your response to the interviewer..."
+                      placeholder={endingInterview ? "Concluding interview and compiling scorecard..." : "Type your response to the interviewer..."}
+                      disabled={interviewLoading || endingInterview}
                       rows={3}
-                      className="flex-1 text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="flex-1 text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
                     />
                     <button
                       onClick={handleSubmitAnswer}
-                      disabled={interviewLoading || !candidateAnswer.trim()}
+                      disabled={interviewLoading || endingInterview || !candidateAnswer.trim()}
                       className="px-5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow"
                     >
                       <Send className="w-3.5 h-3.5" /> Send

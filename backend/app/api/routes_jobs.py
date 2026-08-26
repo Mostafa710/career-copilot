@@ -88,8 +88,13 @@ async def search_jobs(
         ranked_jobs = job_matching_agent.match_and_rank_jobs(
             parsed_cv=user.profile.parsed_data,
             jobs=saved_jobs,
+            cv_embedding=user.profile.embedding,
         )
-        return {"status": "success", "count": len(ranked_jobs), "jobs": ranked_jobs}
+        return {
+            "status": "success",
+            "count": len(ranked_jobs),
+            "jobs": ranked_jobs,
+        }
 
     return {"status": "success", "count": len(saved_jobs), "jobs": saved_jobs}
 

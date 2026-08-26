@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
 import {
   FileText,
@@ -28,6 +28,12 @@ import {
   BookOpen,
   Clock,
   ShieldCheck,
+  LogOut,
+  Lock,
+  Mail,
+  UserCheck,
+  ChevronRight,
+  StopCircle,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api";
@@ -38,6 +44,15 @@ export default function CareerCopilotApp() {
   const [activeTab, setActiveTab] = useState<"cv" | "jobs" | "tailor" | "crm" | "interview" | "roadmap">("cv");
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Authentication State
+  const [token, setToken] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+
   // User & CV State
   const [activeCV, setActiveCV] = useState<any>(null);
   const [cvLoading, setCvLoading] = useState(false);
@@ -45,7 +60,6 @@ export default function CareerCopilotApp() {
 
   // Job Search State
   const [searchQuery, setSearchQuery] = useState("Software Engineer");
-  const [searchCountry, setSearchCountry] = useState("gb");
   const [jobs, setJobs] = useState<any[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState<any>(null);
@@ -60,30 +74,107 @@ export default function CareerCopilotApp() {
   // Mini-CRM State
   const [crmApplications, setCrmApplications] = useState<any[]>([]);
 
-  // Mock Interview State
+  // Mock Interview State (Open-Ended)
   const [interviewType, setInterviewType] = useState("Technical");
   const [interviewSession, setInterviewSession] = useState<any>(null);
   const [interviewTurns, setInterviewTurns] = useState<any[]>([]);
   const [candidateAnswer, setCandidateAnswer] = useState("");
   const [interviewLoading, setInterviewLoading] = useState(false);
+  const [endingInterview, setEndingInterview] = useState(false);
 
-  // Roadmap State
-  const [roadmapRole, setRoadmapRole] = useState("Cloud Architect");
-  const [roadmapTimeframe, setRoadmapTimeframe] = useState("3 months");
-  const [roadmapHours, setRoadmapHours] = useState(10);
-  const [roadmapResult, setRoadmapResult] = useState<any>(null);
+  // Conversational Roadmap Chat State
+  const [roadmapMessages, setRoadmapMessages] = useState<any[]>([
+    {
+      role: "assistant",
+      content:
+        "Hello! I am your **Career Roadmap Planner**. Tell me your target role (e.g. *AI Engineer*, *Cloud Architect*) and how many hours per week you can study. I'll design a feasibility-verified learning roadmap for you!",
+    },
+  ]);
+  const [roadmapInput, setRoadmapInput] = useState("");
   const [roadmapLoading, setRoadmapLoading] = useState(false);
-  const [roadmapError, setRoadmapError] = useState("");
+  const roadmapChatEndRef = useRef<HTMLDivElement>(null);
 
+  // Check Local Auth Token on Mount
   useEffect(() => {
     setMounted(true);
-    fetchActiveCV();
-    fetchCRM();
+    const storedToken = localStorage.getItem("career_copilot_token");
+    const storedEmail = localStorage.getItem("career_copilot_email");
+    if (storedToken) {
+      setToken(storedToken);
+      if (storedEmail) setUserEmail(storedEmail);
+      fetchActiveCV(storedToken);
+      fetchCRM(storedToken);
+    }
   }, []);
 
-  const fetchActiveCV = async () => {
+  useEffect(() => {
+    roadmapChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [roadmapMessages]);
+
+  // Centralized Authenticated Fetch Helper
+  const authFetch = async (endpoint: string, options: RequestInit = {}, authToken = token) => {
+    const headers = new Headers(options.headers || {});
+    if (authToken) {
+      headers.set("Authorization", `Bearer ${authToken}`);
+    }
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+    });
+    if (res.status === 401) {
+      handleLogout();
+    }
+    return res;
+  };
+
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setAuthLoading(true);
+
+    const url = authMode === "login" ? `${API_BASE}/auth/login` : `${API_BASE}/auth/register`;
     try {
-      const res = await fetch(`${API_BASE}/cv/active`);
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authEmail, password: authPassword }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setAuthError(data.detail || "Authentication failed. Please check credentials.");
+        return;
+      }
+
+      setToken(data.access_token);
+      setUserEmail(data.email);
+      localStorage.setItem("career_copilot_token", data.access_token);
+      localStorage.setItem("career_copilot_email", data.email);
+
+      fetchActiveCV(data.access_token);
+      fetchCRM(data.access_token);
+    } catch (err) {
+      setAuthError("Unable to connect to backend server. Ensure API is running.");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    setToken(null);
+    setUserEmail("");
+    setActiveCV(null);
+    setJobs([]);
+    setTailoredApp(null);
+    setCrmApplications([]);
+    setInterviewSession(null);
+    localStorage.removeItem("career_copilot_token");
+    localStorage.removeItem("career_copilot_email");
+  };
+
+  const fetchActiveCV = async (authToken = token) => {
+    try {
+      const res = await authFetch("/cv/active", {}, authToken);
       if (res.ok) {
         const data = await res.json();
         if (data.has_active_cv) {
@@ -95,9 +186,9 @@ export default function CareerCopilotApp() {
     }
   };
 
-  const fetchCRM = async () => {
+  const fetchCRM = async (authToken = token) => {
     try {
-      const res = await fetch(`${API_BASE}/application/crm`);
+      const res = await authFetch("/application/crm", {}, authToken);
       if (res.ok) {
         const data = await res.json();
         setCrmApplications(data.applications || []);
@@ -115,7 +206,7 @@ export default function CareerCopilotApp() {
 
     setCvLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/cv/upload`, {
+      const res = await authFetch("/cv/upload", {
         method: "POST",
         body: formData,
       });
@@ -139,7 +230,7 @@ export default function CareerCopilotApp() {
     if (!pasteText.trim()) return;
     setCvLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/cv/paste`, {
+      const res = await authFetch("/cv/paste", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ raw_text: pasteText }),
@@ -164,7 +255,7 @@ export default function CareerCopilotApp() {
   const handleSearchJobs = async () => {
     setJobsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/jobs/search`, {
+      const res = await authFetch("/jobs/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: searchQuery }),
@@ -185,7 +276,7 @@ export default function CareerCopilotApp() {
     setInsightsLoading(true);
     setInsightsModalOpen(true);
     try {
-      const res = await fetch(`${API_BASE}/jobs/${job.id}/insights`);
+      const res = await authFetch(`/jobs/${job.id}/insights`);
       if (res.ok) {
         const data = await res.json();
         setCompanyInsights(data.insights);
@@ -202,7 +293,7 @@ export default function CareerCopilotApp() {
     setActiveTab("tailor");
     setTailorLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/application/tailor`, {
+      const res = await authFetch("/application/tailor", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ job_id: job.id }),
@@ -221,7 +312,7 @@ export default function CareerCopilotApp() {
   const handleSaveToCRM = async () => {
     if (!tailoredApp || !selectedJob) return;
     try {
-      const res = await fetch(`${API_BASE}/application/save-crm`, {
+      const res = await authFetch("/application/save-crm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -243,16 +334,17 @@ export default function CareerCopilotApp() {
     }
   };
 
+  // Open-Ended Interview Handlers
   const handleStartInterview = async () => {
     setInterviewLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/interview/start`, {
+      const res = await authFetch("/interview/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           interview_type: interviewType,
           job_id: selectedJob?.id || null,
-          total_turns: 5,
+          total_turns: 999, // Open-ended
         }),
       });
       if (res.ok) {
@@ -275,7 +367,7 @@ export default function CareerCopilotApp() {
 
     setInterviewLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/interview/turn`, {
+      const res = await authFetch("/interview/turn", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -289,7 +381,6 @@ export default function CareerCopilotApp() {
           ...prev,
           current_turn: data.current_turn,
           is_completed: data.is_completed,
-          final_evaluation: data.final_evaluation,
         }));
         if (data.micro_feedback) {
           setInterviewTurns((prev) => [
@@ -308,52 +399,90 @@ export default function CareerCopilotApp() {
     }
   };
 
-  const handleGenerateRoadmap = async () => {
-    if (!roadmapRole.trim()) {
-      setRoadmapError("Please enter your target role.");
-      return;
-    }
-    if (!roadmapHours || roadmapHours <= 0) {
-      setRoadmapError("Please specify how many hours per week you can study.");
-      return;
-    }
-    setRoadmapError("");
-    setRoadmapLoading(true);
+  const handleEndInterview = async () => {
+    if (!interviewSession) return;
+    setEndingInterview(true);
     try {
-      const res = await fetch(`${API_BASE}/roadmap/generate`, {
+      const res = await authFetch("/interview/end", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          target_role: roadmapRole,
-          timeframe: roadmapTimeframe,
-          hours_per_week: roadmapHours,
-        }),
+        body: JSON.stringify({ session_id: interviewSession.session_id }),
       });
       if (res.ok) {
         const data = await res.json();
-        setRoadmapResult(data.roadmap);
-      } else {
-        const errData = await res.json();
-        setRoadmapError(errData.detail || "Roadmap generation failed.");
+        setInterviewSession((prev: any) => ({
+          ...prev,
+          is_completed: true,
+          final_evaluation: data.final_evaluation,
+        }));
       }
     } catch (err) {
-      console.error("Roadmap error:", err);
-      setRoadmapError("Failed to connect to backend roadmap engine.");
+      console.error("End interview error:", err);
+    } finally {
+      setEndingInterview(false);
+    }
+  };
+
+  // Conversational Roadmap Chat Handler
+  const handleSendRoadmapMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!roadmapInput.trim() || roadmapLoading) return;
+
+    const userMsg = roadmapInput.trim();
+    setRoadmapInput("");
+    setRoadmapMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+
+    setRoadmapLoading(true);
+    try {
+      const history = roadmapMessages.map((m) => ({ role: m.role, content: m.content }));
+      const res = await authFetch("/roadmap/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: userMsg,
+          conversation_history: history,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setRoadmapMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: data.response,
+            roadmap: data.roadmap,
+          },
+        ]);
+      } else {
+        setRoadmapMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "Sorry, I ran into an error designing your roadmap. Please ensure your study hours are specified!",
+          },
+        ]);
+      }
+    } catch (err) {
+      setRoadmapMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Failed to connect to the Career Roadmap assistant.",
+        },
+      ]);
     } finally {
       setRoadmapLoading(false);
     }
   };
 
   const handleDeleteAccount = async () => {
-    if (confirm("Are you sure you want to permanently delete your account and all data? This cannot be undone.")) {
+    if (confirm("Are you sure you want to permanently delete your account and all associated data?")) {
       try {
-        await fetch(`${API_BASE}/auth/account`, { method: "DELETE" });
-        setActiveCV(null);
-        setJobs([]);
-        setTailoredApp(null);
-        setCrmApplications([]);
+        await authFetch("/auth/account", { method: "DELETE" });
+        handleLogout();
         setSettingsOpen(false);
-        alert("Account and personal records permanently deleted.");
+        alert("Account and records permanently deleted.");
       } catch (err) {
         console.error("Delete error:", err);
       }
@@ -362,27 +491,130 @@ export default function CareerCopilotApp() {
 
   if (!mounted) return null;
 
+  // Unauthenticated Flow: Clean & Radiant Auth Screen
+  if (!token) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-[#070b14] flex flex-col items-center justify-center p-4 selection:bg-indigo-500 selection:text-white">
+        <div className="w-full max-w-md">
+          {/* Brand Header */}
+          <div className="text-center mb-8">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-indigo-600 to-cyan-500 flex items-center justify-center text-white shadow-xl shadow-indigo-500/25 mb-4">
+              <Sparkles className="w-7 h-7" />
+            </div>
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Career Copilot</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              Autonomous Multi-Agent Career & Job Strategy Platform
+            </p>
+          </div>
+
+          {/* Auth Card */}
+          <div className="glass-card p-8 bg-white dark:bg-slate-900/90 shadow-xl border border-slate-200 dark:border-slate-800">
+            <div className="flex rounded-xl bg-slate-100 dark:bg-slate-950 p-1 mb-6 border border-slate-200 dark:border-slate-850">
+              <button
+                onClick={() => { setAuthMode("login"); setAuthError(""); }}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                  authMode === "login"
+                    ? "bg-white dark:bg-indigo-600 text-indigo-600 dark:text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => { setAuthMode("register"); setAuthError(""); }}
+                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                  authMode === "register"
+                    ? "bg-white dark:bg-indigo-600 text-indigo-600 dark:text-white shadow-sm"
+                    : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
+
+            {authError && (
+              <div className="mb-4 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type="email"
+                    required
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <input
+                    type="password"
+                    required
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 mt-2"
+              >
+                {authLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
+                {authMode === "login" ? "Sign In to Career Copilot" : "Register & Start"}
+              </button>
+            </form>
+
+            <p className="text-[11px] text-center text-slate-400 mt-5">
+              Secure JWT authentication with full single active CV privacy protection.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Authenticated Main Application Surface
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#070b14] text-slate-900 dark:text-slate-100 transition-colors">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-800/80 bg-white/80 dark:bg-[#0c1220]/80 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0c1220]/90 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20">
-              <Sparkles className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
+              <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-cyan-500 dark:from-indigo-400 dark:to-cyan-300 bg-clip-text text-transparent">
+              <span className="text-base font-black tracking-tight bg-gradient-to-r from-indigo-600 to-cyan-500 dark:from-indigo-400 dark:to-cyan-300 bg-clip-text text-transparent">
                 Career Copilot
               </span>
-              <span className="hidden sm:inline-block ml-2 px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60">
+              <span className="hidden sm:inline-block ml-2 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                 Multi-Agent AI
               </span>
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <nav className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-900/60 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+          <nav className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
             {[
               { id: "cv", label: "CV Analysis", icon: FileText },
               { id: "jobs", label: "Job Matcher", icon: Search },
@@ -397,7 +629,7 @@ export default function CareerCopilotApp() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                     isActive
                       ? "bg-white dark:bg-indigo-600 text-indigo-600 dark:text-white shadow-sm"
                       : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
@@ -410,30 +642,30 @@ export default function CareerCopilotApp() {
             })}
           </nav>
 
-          {/* Actions: Theme & Settings */}
+          {/* User Status & Actions */}
           <div className="flex items-center gap-2">
             {/* Theme Toggle */}
-            <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
+            <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800">
               <button
                 onClick={() => setTheme("light")}
-                className={`p-1.5 rounded-md ${theme === "light" ? "bg-white text-amber-500 shadow-sm" : "text-slate-500"}`}
+                className={`p-1.5 rounded-md ${theme === "light" ? "bg-white text-amber-500 shadow-sm" : "text-slate-400"}`}
                 title="Light Mode"
               >
-                <Sun className="w-4 h-4" />
+                <Sun className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={() => setTheme("dark")}
-                className={`p-1.5 rounded-md ${theme === "dark" ? "bg-slate-800 text-indigo-400 shadow-sm" : "text-slate-500"}`}
+                className={`p-1.5 rounded-md ${theme === "dark" ? "bg-slate-800 text-indigo-400 shadow-sm" : "text-slate-400"}`}
                 title="Dark Mode"
               >
-                <Moon className="w-4 h-4" />
+                <Moon className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={() => setTheme("system")}
-                className={`p-1.5 rounded-md ${theme === "system" ? "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-sm" : "text-slate-500"}`}
+                className={`p-1.5 rounded-md ${theme === "system" ? "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 shadow-sm" : "text-slate-400"}`}
                 title="System Mode"
               >
-                <Laptop className="w-4 h-4" />
+                <Laptop className="w-3.5 h-3.5" />
               </button>
             </div>
 
@@ -442,7 +674,15 @@ export default function CareerCopilotApp() {
               className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               title="Settings"
             >
-              <SettingsIcon className="w-5 h-5" />
+              <SettingsIcon className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+              title="Log Out"
+            >
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -453,23 +693,21 @@ export default function CareerCopilotApp() {
         {/* TAB 1: CV ANALYSIS */}
         {activeTab === "cv" && (
           <div className="space-y-8">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">CV Ingestion & General ATS Readiness</h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Upload your CV (PDF/DOCX) or paste raw text. The engine runs a deterministic 100-point audit without hallucinations.
-                </p>
-              </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">CV Ingestion & General ATS Readiness</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Upload your CV (PDF/DOCX) or paste raw text. The engine runs a deterministic 100-point audit without hallucinations.
+              </p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Upload Card */}
-              <div className="glass-card p-6 lg:col-span-1 space-y-5">
-                <h3 className="text-base font-semibold flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-indigo-500" />
+              <div className="glass-card p-6 lg:col-span-1 space-y-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <h3 className="text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                  <FileText className="w-4 h-4 text-indigo-600" />
                   Single Active CV Upload
                 </h3>
-                <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center hover:border-indigo-500 transition-colors">
+                <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center hover:border-indigo-500 transition-colors bg-slate-50/50 dark:bg-slate-950/50">
                   <input
                     type="file"
                     accept=".pdf,.docx,.doc,.txt"
@@ -481,10 +719,10 @@ export default function CareerCopilotApp() {
                     <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
                       <FileText className="w-6 h-6" />
                     </div>
-                    <span className="text-sm font-medium text-slate-900 dark:text-slate-200">
+                    <span className="text-xs font-semibold text-slate-900 dark:text-slate-200">
                       Click to upload resume file
                     </span>
-                    <span className="text-xs text-slate-500">Supports PDF (with OCR fallback) and DOCX</span>
+                    <span className="text-[11px] text-slate-400">Supports PDF (with OCR fallback) and DOCX</span>
                   </label>
                 </div>
 
@@ -493,7 +731,7 @@ export default function CareerCopilotApp() {
                     <div className="w-full border-t border-slate-200 dark:border-slate-800" />
                   </div>
                   <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-white dark:bg-slate-900 px-2 text-slate-500">Or Paste Text</span>
+                    <span className="bg-white dark:bg-slate-900 px-2 text-slate-400 font-semibold">Or Paste Text</span>
                   </div>
                 </div>
 
@@ -502,27 +740,27 @@ export default function CareerCopilotApp() {
                   onChange={(e) => setPasteText(e.target.value)}
                   placeholder="Paste your CV text here..."
                   rows={4}
-                  className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
                 <button
                   onClick={handlePasteCV}
                   disabled={cvLoading || !pasteText.trim()}
-                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg shadow transition-all"
+                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow transition-all"
                 >
                   {cvLoading ? "Analyzing..." : "Analyze Pasted Text"}
                 </button>
               </div>
 
               {/* General ATS Score Display */}
-              <div className="glass-card p-6 lg:col-span-2 space-y-6">
+              <div className="glass-card p-6 lg:col-span-2 space-y-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                 {activeCV?.general_ats_score ? (
                   <div>
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
                       <div>
-                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                        <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
                           Active Resume: {activeCV.filename}
                         </span>
-                        <h2 className="text-xl font-bold mt-0.5">Resume Readiness Audit</h2>
+                        <h2 className="text-xl font-bold mt-0.5 text-slate-900 dark:text-white">Resume Readiness Audit</h2>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="text-right">
@@ -530,7 +768,7 @@ export default function CareerCopilotApp() {
                             {activeCV.general_ats_score.overall_score}
                             <span className="text-sm text-slate-400 font-normal">/100</span>
                           </div>
-                          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
                             Deterministic Score
                           </span>
                         </div>
@@ -545,9 +783,9 @@ export default function CareerCopilotApp() {
                         { label: "Quantifiable Impact", val: activeCV.general_ats_score.category_scores.quantifiable_impact, max: 25 },
                         { label: "Formatting & Skills", val: activeCV.general_ats_score.category_scores.formatting_and_skills, max: 25 },
                       ].map((cat, i) => (
-                        <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800">
-                          <span className="text-xs text-slate-500 dark:text-slate-400 block">{cat.label}</span>
-                          <span className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                        <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 block">{cat.label}</span>
+                          <span className="text-lg font-black text-slate-900 dark:text-slate-100">
                             {cat.val}<span className="text-xs text-slate-400 font-normal">/{cat.max}</span>
                           </span>
                         </div>
@@ -556,19 +794,19 @@ export default function CareerCopilotApp() {
 
                     {/* Feedback Checklist */}
                     <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
                         Actionable Improvement Checklist
                       </h4>
                       <div className="space-y-2">
                         {activeCV.general_ats_score.feedback_checklist?.length > 0 ? (
                           activeCV.general_ats_score.feedback_checklist.map((fb: string, i: number) => (
-                            <div key={i} className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900/40">
+                            <div key={i} className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900/40">
                               <AlertCircle className="w-4 h-4 shrink-0 text-amber-500 mt-0.5" />
                               <span>{fb}</span>
                             </div>
                           ))
                         ) : (
-                          <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900/40">
+                          <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900/40">
                             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                             <span>Your CV meets all baseline ATS hygiene, action verb, and metrics criteria!</span>
                           </div>
@@ -578,7 +816,7 @@ export default function CareerCopilotApp() {
 
                     {/* Detected Skills */}
                     <div className="mt-6">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
                         Detected Skills ({activeCV.parsed_profile?.skills_inventory?.length || 0})
                       </h4>
                       <div className="flex flex-wrap gap-1.5">
@@ -591,10 +829,10 @@ export default function CareerCopilotApp() {
                     </div>
                   </div>
                 ) : (
-                  <div className="py-12 text-center text-slate-500">
+                  <div className="py-16 text-center text-slate-400">
                     <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
-                    <p className="text-sm font-medium">No CV analyzed yet.</p>
-                    <p className="text-xs text-slate-400 mt-1">Upload a resume to see your score and actionable suggestions.</p>
+                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">No CV analyzed yet.</p>
+                    <p className="text-xs text-slate-400 mt-1">Upload a resume file to inspect your ATS readiness score.</p>
                   </div>
                 )}
               </div>
@@ -606,28 +844,28 @@ export default function CareerCopilotApp() {
         {activeTab === "jobs" && (
           <div className="space-y-6">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Market Research & Job Matcher</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Dynamic backfill pagination delivers 7–10 deduplicated postings per search with instant company insights.
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Market Research & Job Matcher</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Adzuna dynamic backfill + Tavily web search delivers 7–10 deduplicated postings per search with instant company intelligence.
               </p>
             </div>
 
             {/* Search Bar */}
-            <div className="glass-card p-4 flex flex-col sm:flex-row gap-3">
+            <div className="glass-card p-4 flex flex-col sm:flex-row gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Target Role or Skills (e.g. FastAPI, DevOps Engineer)..."
-                  className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Target Role or Skills (e.g. AI Engineer, Python Alexandria, React Remote)..."
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
               <button
                 onClick={handleSearchJobs}
                 disabled={jobsLoading}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-semibold rounded-lg flex items-center justify-center gap-2 shadow"
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 shadow"
               >
                 {jobsLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                 Search 7–10 Jobs
@@ -637,23 +875,23 @@ export default function CareerCopilotApp() {
             {/* Job Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {jobs.map((job, idx) => (
-                <div key={idx} className="glass-card p-5 flex flex-col justify-between space-y-4 hover:border-indigo-500 transition-all">
+                <div key={idx} className="glass-card p-5 flex flex-col justify-between space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all">
                   <div>
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{job.title}</h3>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{job.title}</h3>
                         <span className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                           <Building className="w-3.5 h-3.5" /> {job.company} • <MapPin className="w-3.5 h-3.5" /> {job.location || "Remote"}
                         </span>
                       </div>
                       {job.match_score !== undefined && (
-                        <div className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                        <div className="px-2.5 py-1 rounded-full text-xs font-black bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                           {job.match_score}% Match
                         </div>
                       )}
                     </div>
 
-                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-3 line-clamp-3">
+                    <p className="text-xs text-slate-600 dark:text-slate-300 mt-3 line-clamp-3 leading-relaxed">
                       {job.description}
                     </p>
 
@@ -661,12 +899,12 @@ export default function CareerCopilotApp() {
                     {job.matched_skills && job.matched_skills.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-1">
                         {job.matched_skills.slice(0, 4).map((ms: string, i: number) => (
-                          <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900">
+                          <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
                             ✓ {ms}
                           </span>
                         ))}
                         {job.missing_skills?.slice(0, 2).map((ms: string, i: number) => (
-                          <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900">
+                          <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900">
                             + {ms}
                           </span>
                         ))}
@@ -677,13 +915,13 @@ export default function CareerCopilotApp() {
                   <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
                     <button
                       onClick={() => handleFetchInsights(job)}
-                      className="text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"
+                      className="text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"
                     >
                       <Building className="w-3.5 h-3.5" /> Company Insights
                     </button>
                     <button
                       onClick={() => handleTailorApplication(job)}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow"
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow"
                     >
                       <Sparkles className="w-3.5 h-3.5" /> Tailor Application
                     </button>
@@ -693,10 +931,10 @@ export default function CareerCopilotApp() {
             </div>
 
             {jobs.length === 0 && !jobsLoading && (
-              <div className="glass-card py-16 text-center text-slate-500">
+              <div className="glass-card py-16 text-center text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                 <Search className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
-                <p className="text-sm font-medium">Ready to search market postings.</p>
-                <p className="text-xs text-slate-400 mt-1">Click "Search 7–10 Jobs" above to retrieve live openings.</p>
+                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Ready to search market postings.</p>
+                <p className="text-xs text-slate-400 mt-1">Type your desired role above to retrieve live openings.</p>
               </div>
             )}
           </div>
@@ -707,8 +945,8 @@ export default function CareerCopilotApp() {
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight">Application Studio (Fact-Checked)</h1>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Application Studio (Fact-Checked)</h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   Tailored experience, cover letter, and cold email. Verified by Critic against your original CV.
                 </p>
               </div>
@@ -716,7 +954,7 @@ export default function CareerCopilotApp() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleSaveToCRM}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow"
                   >
                     Save to Mini-CRM
                   </button>
@@ -725,9 +963,9 @@ export default function CareerCopilotApp() {
             </div>
 
             {tailorLoading ? (
-              <div className="glass-card py-16 text-center space-y-3">
-                <RefreshCw className="w-8 h-8 mx-auto animate-spin text-indigo-500" />
-                <p className="text-sm font-semibold">Agent tailoring experience & running Fact Critic...</p>
+              <div className="glass-card py-16 text-center space-y-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <RefreshCw className="w-8 h-8 mx-auto animate-spin text-indigo-600" />
+                <p className="text-sm font-bold text-slate-900 dark:text-white">Tailoring application & executing Fact Critic loop...</p>
                 <p className="text-xs text-slate-400">Verifying zero hallucinations against your original CV.</p>
               </div>
             ) : tailoredApp ? (
@@ -747,7 +985,7 @@ export default function CareerCopilotApp() {
                   </div>
                   <div className="text-right">
                     <span className="text-xs text-slate-500">ATS Match Delta:</span>
-                    <div className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    <div className="text-sm font-black text-slate-900 dark:text-slate-100">
                       {tailoredApp.ats_score_before}% → <span className="text-emerald-600">{tailoredApp.ats_score_after}%</span>
                     </div>
                   </div>
@@ -755,13 +993,13 @@ export default function CareerCopilotApp() {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Tailored Experience */}
-                  <div className="glass-card p-5 space-y-4">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-indigo-500" /> Tailored Experience Bullets
+                  <div className="glass-card p-5 space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-indigo-600" /> Tailored Experience Bullets
                     </h3>
                     <div className="space-y-4">
                       {tailoredApp.tailored_cv_data?.experience?.map((exp: any, i: number) => (
-                        <div key={i} className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                        <div key={i} className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
                           <strong className="text-xs font-bold text-slate-900 dark:text-slate-100">
                             {exp.title} — {exp.company}
                           </strong>
@@ -776,33 +1014,33 @@ export default function CareerCopilotApp() {
                   </div>
 
                   {/* Cover Letter & Email */}
-                  <div className="glass-card p-5 space-y-5">
+                  <div className="glass-card p-5 space-y-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                     <div>
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-2">Cover Letter</h3>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Cover Letter</h3>
                       <textarea
                         value={tailoredApp.cover_letter}
                         onChange={(e) => setTailoredApp({ ...tailoredApp, cover_letter: e.target.value })}
                         rows={7}
-                        className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                        className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                       />
                     </div>
 
                     <div>
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-2">Cold Outreach Email</h3>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">Cold Outreach Email</h3>
                       <textarea
                         value={tailoredApp.cold_email}
                         onChange={(e) => setTailoredApp({ ...tailoredApp, cold_email: e.target.value })}
                         rows={5}
-                        className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                        className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
                       />
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="glass-card py-16 text-center text-slate-500">
+              <div className="glass-card py-16 text-center text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                 <Sparkles className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
-                <p className="text-sm font-medium">Select a job posting in Job Matcher to tailor your application.</p>
+                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Select a job posting in Job Matcher to tailor your application.</p>
               </div>
             )}
           </div>
@@ -812,8 +1050,8 @@ export default function CareerCopilotApp() {
         {activeTab === "crm" && (
           <div className="space-y-6">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Application Tracker (Mini-CRM)</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Application Tracker (Mini-CRM)</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 Track your active job applications across all stages.
               </p>
             </div>
@@ -822,9 +1060,9 @@ export default function CareerCopilotApp() {
               {["Tailored", "Applied", "Interviewing", "Offered"].map((colStatus) => {
                 const colApps = crmApplications.filter((a) => a.status === colStatus);
                 return (
-                  <div key={colStatus} className="glass-card p-4 space-y-3">
+                  <div key={colStatus} className="glass-card p-4 space-y-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                     <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-                      <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{colStatus}</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">{colStatus}</span>
                       <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800">
                         {colApps.length}
                       </span>
@@ -832,7 +1070,7 @@ export default function CareerCopilotApp() {
 
                     <div className="space-y-3">
                       {colApps.map((app, i) => (
-                        <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                        <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1.5">
                           <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">{app.title}</h4>
                           <span className="text-[11px] text-slate-500 block">{app.company}</span>
                           {app.ats_score_after && (
@@ -853,30 +1091,30 @@ export default function CareerCopilotApp() {
           </div>
         )}
 
-        {/* TAB 5: MOCK INTERVIEW */}
+        {/* TAB 5: MOCK INTERVIEW (OPEN-ENDED) */}
         {activeTab === "interview" && (
           <div className="space-y-6">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Interactive Mock Interview Simulator</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Dynamic multi-turn interview with real-time micro-feedback and STAR rubric evaluation.
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Interactive Mock Interview Simulator</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Open-ended simulation with dynamic micro-feedback. Continue as long as you like and conclude whenever you are ready.
               </p>
             </div>
 
             {!interviewSession ? (
-              <div className="glass-card p-6 max-w-xl mx-auto space-y-5 text-center">
-                <MessageSquare className="w-12 h-12 mx-auto text-indigo-500" />
-                <h3 className="text-base font-bold">Configure Your Interview Session</h3>
+              <div className="glass-card p-8 max-w-xl mx-auto space-y-5 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <MessageSquare className="w-12 h-12 mx-auto text-indigo-600" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">Configure Your Mock Interview</h3>
                 
                 <div className="flex justify-center gap-2">
                   {["General", "Technical", "Behavioral"].map((mode) => (
                     <button
                       key={mode}
                       onClick={() => setInterviewType(mode)}
-                      className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
                         interviewType === mode
                           ? "bg-indigo-600 text-white shadow"
-                          : "bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400"
+                          : "bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400"
                       }`}
                     >
                       {mode} Mode
@@ -884,10 +1122,10 @@ export default function CareerCopilotApp() {
                   ))}
                 </div>
 
-                <p className="text-xs text-slate-500">
-                  {interviewType === "Behavioral" && "Evaluates answers strictly on the STAR method (Situation, Task, Action, Result)."}
-                  {interviewType === "Technical" && "Probes technical depth, architectures, and system tradeoffs based on target role."}
-                  {interviewType === "General" && "Covers introduction, motivation, and career communication."}
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  {interviewType === "Behavioral" && "Evaluates answers strictly against the STAR method (Situation, Task, Action, Result)."}
+                  {interviewType === "Technical" && "Probes system architecture, technical tradeoffs, and engineering decisions."}
+                  {interviewType === "General" && "Covers self-introduction, career motivations, and behavioral communication."}
                 </p>
 
                 <button
@@ -895,16 +1133,25 @@ export default function CareerCopilotApp() {
                   disabled={interviewLoading}
                   className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow"
                 >
-                  {interviewLoading ? "Starting..." : "Start 5-Turn Mock Interview"}
+                  {interviewLoading ? "Starting Session..." : "Start Mock Interview"}
                 </button>
               </div>
             ) : (
-              <div className="glass-card p-6 space-y-6">
+              <div className="glass-card p-6 space-y-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                   <span className="text-xs font-bold uppercase text-indigo-600 dark:text-indigo-400">
-                    {interviewSession.interview_type} Interview — Turn {interviewSession.current_turn || 1}/5
+                    {interviewSession.interview_type} Interview — Turn {interviewSession.current_turn || 1}
                   </span>
-                  {interviewSession.is_completed && (
+                  {!interviewSession.is_completed ? (
+                    <button
+                      onClick={handleEndInterview}
+                      disabled={endingInterview}
+                      className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all"
+                    >
+                      {endingInterview ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <StopCircle className="w-3.5 h-3.5" />}
+                      Conclude Interview & View Scorecard
+                    </button>
+                  ) : (
                     <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-full">
                       Completed
                     </span>
@@ -912,7 +1159,7 @@ export default function CareerCopilotApp() {
                 </div>
 
                 {/* Turns Chat Box */}
-                <div className="space-y-4 max-h-[450px] overflow-y-auto pr-2">
+                <div className="space-y-4 max-h-[480px] overflow-y-auto pr-2">
                   {interviewTurns.map((turn, i) => (
                     <div
                       key={i}
@@ -921,13 +1168,13 @@ export default function CareerCopilotApp() {
                           ? "bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60"
                           : turn.role === "feedback"
                           ? "bg-amber-50/80 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50"
-                          : "bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 ml-8"
+                          : "bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 ml-8"
                       }`}
                     >
                       <strong className="block font-bold mb-1 text-slate-900 dark:text-slate-100">
                         {turn.role === "interviewer" ? "🎙️ Interviewer:" : turn.role === "feedback" ? "💡 Micro-Feedback:" : "👤 You:"}
                       </strong>
-                      <p className="leading-relaxed text-slate-700 dark:text-slate-300">{turn.content}</p>
+                      <p className="leading-relaxed text-slate-800 dark:text-slate-200">{turn.content}</p>
                     </div>
                   ))}
                 </div>
@@ -939,14 +1186,14 @@ export default function CareerCopilotApp() {
                       <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
                         <Award className="w-4 h-4" /> Final Evaluation Scorecard
                       </h4>
-                      <span className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
+                      <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
                         {interviewSession.final_evaluation.overall_score}/100
                       </span>
                     </div>
-                    <p className="text-xs text-slate-700 dark:text-slate-300 font-medium">
-                      Recommendation: <strong>{interviewSession.final_evaluation.hiring_recommendation}</strong>
+                    <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold">
+                      Recommendation: <strong className="text-emerald-600">{interviewSession.final_evaluation.hiring_recommendation}</strong>
                     </p>
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                       {interviewSession.final_evaluation.star_method_assessment || interviewSession.final_evaluation.technical_depth_assessment}
                     </p>
                   </div>
@@ -957,16 +1204,16 @@ export default function CareerCopilotApp() {
                     <textarea
                       value={candidateAnswer}
                       onChange={(e) => setCandidateAnswer(e.target.value)}
-                      placeholder="Type your answer using the STAR method..."
+                      placeholder="Type your response to the interviewer..."
                       rows={3}
-                      className="flex-1 text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="flex-1 text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                     <button
                       onClick={handleSubmitAnswer}
                       disabled={interviewLoading || !candidateAnswer.trim()}
-                      className="px-5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-semibold flex items-center gap-1 shadow"
+                      className="px-5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow"
                     >
-                      <Send className="w-3.5 h-3.5" /> Submit
+                      <Send className="w-3.5 h-3.5" /> Send
                     </button>
                   </div>
                 )}
@@ -975,123 +1222,102 @@ export default function CareerCopilotApp() {
           </div>
         )}
 
-        {/* TAB 6: CAREER ROADMAP */}
+        {/* TAB 6: CONVERSATIONAL CAREER ROADMAP ASSISTANT */}
         {activeTab === "roadmap" && (
           <div className="space-y-6">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Market-Aware Career Roadmap Planner</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Phased learning milestones verified by the Feasibility Critic against your study hours budget.
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Conversational Career Roadmap Assistant</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Chat directly with your career planner. The agent strictly focuses on roadmapping and verifies your weekly study hours before building your feasibility curriculum.
               </p>
             </div>
 
-            {/* Input Gate Form */}
-            <div className="glass-card p-6 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
-                    Target Role *
-                  </label>
-                  <input
-                    type="text"
-                    value={roadmapRole}
-                    onChange={(e) => setRoadmapRole(e.target.value)}
-                    placeholder="e.g. Cloud Architect, ML Engineer"
-                    className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
-                    Timeframe *
-                  </label>
-                  <select
-                    value={roadmapTimeframe}
-                    onChange={(e) => setRoadmapTimeframe(e.target.value)}
-                    className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            {/* Chat Container */}
+            <div className="glass-card flex flex-col h-[650px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              {/* Messages Feed */}
+              <div className="flex-1 p-6 overflow-y-auto space-y-4">
+                {roadmapMessages.map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
                   >
-                    <option value="3 months">3 Months (Intensive)</option>
-                    <option value="6 months">6 Months (Standard)</option>
-                    <option value="1 year">1 Year (Comprehensive)</option>
-                  </select>
-                </div>
+                    <div
+                      className={`max-w-2xl p-4 rounded-2xl text-xs leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-indigo-600 text-white shadow"
+                          : "bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 text-slate-900 dark:text-slate-100"
+                      }`}
+                    >
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-600 dark:text-slate-300 block mb-1">
-                    Weekly Study Hours: <span className="text-indigo-600 dark:text-indigo-400 font-bold">{roadmapHours} hrs/week</span>
-                  </label>
-                  <input
-                    type="range"
-                    min="3"
-                    max="35"
-                    step="1"
-                    value={roadmapHours}
-                    onChange={(e) => setRoadmapHours(Number(e.target.value))}
-                    className="w-full accent-indigo-600 mt-2"
-                  />
-                </div>
-              </div>
+                      {/* Embedded Milestone Timeline if generated */}
+                      {msg.roadmap && (
+                        <div className="mt-4 space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                            <span>{msg.roadmap.target_role} ({msg.roadmap.timeframe})</span>
+                            <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                              Feasibility Verified
+                            </span>
+                          </div>
 
-              {roadmapError && (
-                <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" /> {roadmapError}
-                </div>
-              )}
+                          {msg.roadmap.milestones?.map((m: any, idx: number) => (
+                            <div
+                              key={idx}
+                              className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 text-slate-900 dark:text-slate-100"
+                            >
+                              <div className="flex items-center justify-between">
+                                <strong className="text-xs text-indigo-600 dark:text-indigo-400">{m.title}</strong>
+                                <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                                  <Clock className="w-3 h-3" /> {m.duration_weeks} wks ({m.allocated_hours} hrs)
+                                </span>
+                              </div>
 
-              <button
-                onClick={handleGenerateRoadmap}
-                disabled={roadmapLoading}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow flex items-center justify-center gap-2"
-              >
-                {roadmapLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Compass className="w-4 h-4" />}
-                Generate Feasibility-Verified Roadmap
-              </button>
-            </div>
+                              <div className="flex flex-wrap gap-1">
+                                {m.core_topics?.map((topic: string, j: number) => (
+                                  <span key={j} className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
+                                    {topic}
+                                  </span>
+                                ))}
+                              </div>
 
-            {/* Render Roadmap Milestones */}
-            {roadmapResult && (
-              <div className="space-y-5">
-                <div className="p-4 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold text-indigo-950 dark:text-indigo-200">
-                      {roadmapResult.target_role} — {roadmapResult.timeframe} Roadmap
-                    </h3>
-                    <span className="text-xs text-indigo-700 dark:text-indigo-400">
-                      Study Budget: {roadmapResult.total_study_budget_hours} Total Hours ({roadmapResult.hours_per_week} hrs/week)
-                    </span>
-                  </div>
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold">
-                    Feasibility Critic Passed
-                  </span>
-                </div>
-
-                <div className="space-y-4">
-                  {roadmapResult.milestones?.map((m: any, i: number) => (
-                    <div key={i} className="glass-card p-5 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{m.title}</h4>
-                        <span className="text-xs text-slate-500 flex items-center gap-1">
-                          <Clock className="w-3.5 h-3.5" /> {m.duration_weeks} Weeks ({m.allocated_hours} hrs)
-                        </span>
-                      </div>
-
-                      <div className="flex flex-wrap gap-1.5">
-                        {m.core_topics?.map((topic: string, j: number) => (
-                          <span key={j} className="text-[11px] px-2.5 py-0.5 rounded bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
-                            {topic}
-                          </span>
-                        ))}
-                      </div>
-
-                      <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 text-xs">
-                        <strong className="text-indigo-600 dark:text-indigo-400">Deliverable Project: </strong>
-                        <span className="text-slate-700 dark:text-slate-300">{m.hands_on_project}</span>
-                      </div>
+                              <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-[11px]">
+                                <strong className="text-indigo-600 dark:text-indigo-400">Portfolio Deliverable: </strong>
+                                <span>{m.hands_on_project}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
+                {roadmapLoading && (
+                  <div className="flex items-center gap-2 text-xs text-slate-400 p-2">
+                    <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+                    <span>Roadmap Agent evaluating feasibility & market trends...</span>
+                  </div>
+                )}
+                <div ref={roadmapChatEndRef} />
               </div>
-            )}
+
+              {/* Chat Input Bar */}
+              <form onSubmit={handleSendRoadmapMessage} className="p-4 border-t border-slate-200 dark:border-slate-800 flex gap-2 bg-slate-50/50 dark:bg-slate-950/50">
+                <input
+                  type="text"
+                  value={roadmapInput}
+                  onChange={(e) => setRoadmapInput(e.target.value)}
+                  placeholder="e.g. 'I want to be an AI Engineer in 6 months, studying 12 hours a week'..."
+                  className="flex-1 text-xs px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <button
+                  type="submit"
+                  disabled={roadmapLoading || !roadmapInput.trim()}
+                  className="px-5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow"
+                >
+                  <Send className="w-3.5 h-3.5" /> Send
+                </button>
+              </form>
+            </div>
           </div>
         )}
       </main>
@@ -1099,10 +1325,10 @@ export default function CareerCopilotApp() {
       {/* Company Insights Modal */}
       {insightsModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="glass-card max-w-lg w-full p-6 space-y-4 bg-white dark:bg-slate-900 shadow-2xl">
+          <div className="glass-card max-w-lg w-full p-6 space-y-4 bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold flex items-center gap-2">
-                <Building className="w-4 h-4 text-indigo-500" />
+              <h3 className="text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+                <Building className="w-4 h-4 text-indigo-600" />
                 {selectedJob?.company || "Company"} Insights
               </h3>
               <button
@@ -1115,7 +1341,7 @@ export default function CareerCopilotApp() {
 
             {insightsLoading ? (
               <div className="py-8 text-center space-y-2">
-                <RefreshCw className="w-6 h-6 mx-auto animate-spin text-indigo-500" />
+                <RefreshCw className="w-6 h-6 mx-auto animate-spin text-indigo-600" />
                 <p className="text-xs text-slate-500">Querying company intelligence...</p>
               </div>
             ) : companyInsights ? (
@@ -1142,10 +1368,10 @@ export default function CareerCopilotApp() {
       {/* Settings Modal */}
       {settingsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="glass-card max-w-md w-full p-6 space-y-5 bg-white dark:bg-slate-900 shadow-2xl">
+          <div className="glass-card max-w-md w-full p-6 space-y-5 bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-bold flex items-center gap-2">
-                <SettingsIcon className="w-4 h-4 text-indigo-500" /> Settings & Preferences
+              <h3 className="text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+                <SettingsIcon className="w-4 h-4 text-indigo-600" /> Settings & Preferences
               </h3>
               <button onClick={() => setSettingsOpen(false)} className="text-slate-400 hover:text-slate-200 text-sm font-bold">
                 ✕
@@ -1154,13 +1380,18 @@ export default function CareerCopilotApp() {
 
             <div className="space-y-4 text-xs">
               <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Active User</label>
+                <p className="text-xs text-slate-600 dark:text-slate-400 font-mono">{userEmail}</p>
+              </div>
+
+              <div>
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Theme Mode</label>
                 <div className="flex gap-2">
                   {["light", "dark", "system"].map((t) => (
                     <button
                       key={t}
                       onClick={() => setTheme(t)}
-                      className={`px-3 py-1.5 rounded-lg font-semibold capitalize ${
+                      className={`px-3 py-1.5 rounded-lg font-bold capitalize ${
                         theme === t ? "bg-indigo-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
                       }`}
                     >
@@ -1173,25 +1404,28 @@ export default function CareerCopilotApp() {
               <div>
                 <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Active CV Status</label>
                 <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">
+                  <p className="font-bold text-slate-900 dark:text-slate-100">
                     {activeCV?.filename || "No active CV"}
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Single Active Policy: Uploading a new CV automatically deletes the old file.
+                    Single Active Policy: Uploading a new CV automatically purges previous files.
                   </p>
                 </div>
               </div>
 
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                <button
+                  onClick={handleLogout}
+                  className="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg font-bold flex items-center justify-center gap-2"
+                >
+                  <LogOut className="w-4 h-4" /> Sign Out
+                </button>
                 <button
                   onClick={handleDeleteAccount}
                   className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold flex items-center justify-center gap-2"
                 >
                   <Trash2 className="w-4 h-4" /> Delete Account & Purge Data
                 </button>
-                <p className="text-[11px] text-slate-500 text-center mt-1.5">
-                  Permanently deletes your profile, applications, sessions, and files.
-                </p>
               </div>
             </div>
           </div>

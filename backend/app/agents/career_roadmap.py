@@ -1,5 +1,6 @@
 """Career Roadmap Agent: Generates market-aligned learning paths with study hours budgeting and Feasibility Critic validation."""
 
+import re
 import logging
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
@@ -32,6 +33,34 @@ class CareerRoadmapOutput(BaseModel):
 class FeasibilityEvaluation(BaseModel):
     passed: bool = Field(..., description="True if roadmap workload realistically matches the allocated study hours")
     feedback: str = Field(..., description="Constructive feedback if workload is overambitious or sequence is illogical")
+
+
+class ChatIntentExtraction(BaseModel):
+    is_career_related: bool = Field(..., description="True only if the message is requesting career roadmap/planning advice")
+    target_role: Optional[str] = Field(None, description="Extracted target job role if mentioned")
+    timeframe: Optional[str] = Field(None, description="Extracted timeframe (e.g. '3 months', '6 months')")
+    hours_per_week: Optional[int] = Field(None, description="Extracted numeric hours per week if specified")
+    missing_information_prompt: Optional[str] = Field(None, description="Polite question asking for missing parameters, specifically weekly study hours")
+
+
+CHAT_INTENT_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", """You are the Career Copilot Roadmap Agent.
+STRICT SCOPE POLICY:
+1. You ONLY assist with technical career roadmaps, skill transitions, learning pathways, and study planning.
+2. If the user asks about unrelated topics (e.g. cooking, general chit-chat, poetry, weather), politely decline and state that you are exclusively focused on Career Roadmaps.
+3. To generate an accurate roadmap, you MANDATORILY require:
+   - Target Role (e.g. "Cloud Architect", "AI Engineer")
+   - Timeframe (e.g. "3 months", "6 months", "1 year")
+   - Weekly Study Hours (e.g. 5, 10, 15, 20 hrs/week)
+4. If Weekly Study Hours is NOT explicitly provided by the user, you MUST set is_career_related=true and missing_information_prompt asking them specifically how many hours per week they can commit before proceeding.
+"""),
+    ("human", """Conversation History:
+{history}
+
+User's Latest Message:
+{message}
+""")
+])
 
 
 ROADMAP_GEN_PROMPT = ChatPromptTemplate.from_messages([
@@ -70,6 +99,74 @@ class CareerRoadmapAgent:
         self.generator_llm = get_llm(temperature=0.2)
         self.critic_llm = get_llm(temperature=0.0)
 
+    async def chat_roadmap(
+        self,
+        message: str,
+        conversation_history: List[Dict[str, str]],
+        current_skills: Optional[List[str]] = None,
+        max_attempts: int = 3,
+    ) -> Dict[str, Any]:
+        """
+        Conversational chat entrypoint with scope enforcement, hours gate, and Feasibility Critic.
+        """
+        formatted_history = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in conversation_history[-6:]])
+
+        # 1. Extract Intent & Parameters
+        try:
+            structured_extractor = self.generator_llm.with_structured_output(ChatIntentExtraction)
+            extract_chain = CHAT_INTENT_PROMPT | structured_extractor
+            intent: ChatIntentExtraction = await extract_chain.ainvoke({
+                "history": formatted_history or "No previous history.",
+                "message": message,
+            })
+        except Exception as e:
+            logger.warning(f"Chat intent extraction fallback: {e}")
+            intent = ChatIntentExtraction(
+                is_career_related=True,
+                target_role=message,
+                timeframe="3 months",
+                hours_per_week=None,
+                missing_information_prompt="To tailor your career roadmap accurately, how many hours per week can you commit to studying (e.g., 5, 10, or 20 hours/week)?"
+            )
+
+        # 2. Scope Enforcement
+        if not intent.is_career_related:
+            return {
+                "response": "I am specifically focused on Career Roadmaps and technical learning planning. Please tell me your target role (e.g., AI Engineer, Cloud Architect) and how many hours you can study per week!",
+                "needs_more_info": True,
+                "roadmap": None,
+            }
+
+        # 3. Hours Gate Check
+        if not intent.hours_per_week or intent.hours_per_week <= 0:
+            prompt_msg = intent.missing_information_prompt or "How many hours per week can you commit to studying (e.g. 5, 10, 15 hours)? I will verify the roadmap feasibility against your study budget before generating it."
+            return {
+                "response": prompt_msg,
+                "needs_more_info": True,
+                "extracted_role": intent.target_role,
+                "extracted_timeframe": intent.timeframe,
+                "roadmap": None,
+            }
+
+        # 4. Generate Feasibility-Verified Roadmap
+        target_role = intent.target_role or "Software Engineer"
+        timeframe = intent.timeframe or "3 months"
+        hours_per_week = intent.hours_per_week
+
+        roadmap_data = await self.generate_roadmap(
+            target_role=target_role,
+            timeframe=timeframe,
+            hours_per_week=hours_per_week,
+            current_skills=current_skills,
+            max_attempts=max_attempts,
+        )
+
+        return {
+            "response": f"I've designed a feasibility-verified roadmap for **{target_role}** over **{timeframe}** based on your **{hours_per_week} hours/week** budget ({roadmap_data['total_study_budget_hours']} total hours). Here is your step-by-step curriculum with hands-on portfolio deliverables:",
+            "needs_more_info": False,
+            "roadmap": roadmap_data,
+        }
+
     async def generate_roadmap(
         self,
         target_role: str,
@@ -81,11 +178,9 @@ class CareerRoadmapAgent:
         """
         Executes Roadmap Generation with Feasibility Critic validation.
         """
-        # Input Validation Gate
         if not target_role or not timeframe or not hours_per_week or hours_per_week <= 0:
             raise ValueError("Target role, timeframe, and valid weekly study hours (>0) are required.")
 
-        # Estimate total weeks and study hours
         weeks = 12 if "3" in timeframe else (24 if "6" in timeframe else (52 if "year" in timeframe or "12" in timeframe else 16))
         total_hours = weeks * hours_per_week
 

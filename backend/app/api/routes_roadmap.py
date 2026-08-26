@@ -19,6 +19,50 @@ class GenerateRoadmapRequest(BaseModel):
     hours_per_week: int = Field(..., gt=0, le=80, description="Dedicated study hours per week (e.g. 5, 10, 20)")
 
 
+class ChatRoadmapRequest(BaseModel):
+    message: str
+    conversation_history: Optional[list] = []
+
+
+@router.post("/chat")
+async def chat_career_roadmap(
+    req: ChatRoadmapRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Interactive conversational career roadmap assistant.
+    Strictly restricted to career roadmaps and verifies weekly study hours before generating.
+    """
+    candidate_skills = []
+    if user.profile and user.profile.parsed_data:
+        candidate_skills = user.profile.parsed_data.get("skills_inventory", [])
+
+    result = await career_roadmap_agent.chat_roadmap(
+        message=req.message,
+        conversation_history=req.conversation_history or [],
+        current_skills=candidate_skills,
+        max_attempts=3,
+    )
+
+    # If a full roadmap was generated, save it to DB
+    if result.get("roadmap"):
+        roadmap_data = result["roadmap"]
+        roadmap_db = CareerRoadmap(
+            user_id=user.id,
+            target_role=roadmap_data.get("target_role", "Career Roadmap"),
+            timeframe=roadmap_data.get("timeframe", "3 months"),
+            hours_per_week=roadmap_data.get("hours_per_week", 10),
+            milestones=roadmap_data.get("milestones", []),
+        )
+        db.add(roadmap_db)
+        db.commit()
+        db.refresh(roadmap_db)
+        result["roadmap"]["id"] = str(roadmap_db.id)
+
+    return result
+
+
 @router.post("/generate")
 async def generate_career_roadmap(
     req: GenerateRoadmapRequest,

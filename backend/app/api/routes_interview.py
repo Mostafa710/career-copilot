@@ -16,12 +16,16 @@ router = APIRouter(prefix="/interview", tags=["Mock Interview Simulator"])
 class StartInterviewRequest(BaseModel):
     interview_type: str = "General"  # 'General', 'Technical', 'Behavioral'
     job_id: Optional[uuid.UUID] = None
-    total_turns: int = 5
+    total_turns: Optional[int] = 999  # Open-ended by default
 
 
 class SubmitAnswerRequest(BaseModel):
     session_id: uuid.UUID
     user_response: str
+
+
+class EndInterviewRequest(BaseModel):
+    session_id: uuid.UUID
 
 
 @router.post("/start")
@@ -31,7 +35,7 @@ async def start_interview_session(
     db: Session = Depends(get_db),
 ):
     """
-    Initialize a stateful mock interview session.
+    Initialize an open-ended mock interview session.
     Generates the customized opening question based on the selected mode and target JD.
     """
     job_title = "Software Engineer"
@@ -62,7 +66,7 @@ async def start_interview_session(
         user_id=user.id,
         job_id=req.job_id,
         interview_type=req.interview_type,
-        total_turns=req.total_turns,
+        total_turns=req.total_turns or 999,
         current_turn=1,
         conversation_history=[
             {"role": "interviewer", "content": opening_question}
@@ -77,7 +81,6 @@ async def start_interview_session(
         "session_id": str(session.id),
         "interview_type": session.interview_type,
         "current_turn": 1,
-        "total_turns": session.total_turns,
         "question": opening_question,
     }
 
@@ -90,7 +93,7 @@ async def submit_interview_turn(
 ):
     """
     Submit answer for the current turn.
-    Returns immediate micro-feedback + next question (or final scorecard on turn 5).
+    Returns immediate micro-feedback + next interview question.
     """
     session = db.query(InterviewSession).filter(
         InterviewSession.id == req.session_id,
@@ -129,33 +132,61 @@ async def submit_interview_turn(
     )
 
     next_turn_number = session.current_turn + 1
-    is_completed = next_turn_number > session.total_turns
-
-    final_evaluation = None
-    if is_completed:
-        # Generate complete final scorecard
-        final_evaluation = await mock_interview_agent.generate_final_scorecard(
-            interview_type=session.interview_type,
-            job_title=job_title,
-            conversation_history=history,
-        )
-        session.is_completed = 1
-        session.final_evaluation = final_evaluation
-    else:
-        history.append({"role": "interviewer", "content": turn_eval.next_question})
-        session.current_turn = next_turn_number
-
+    history.append({"role": "interviewer", "content": turn_eval.next_question})
+    session.current_turn = next_turn_number
     session.conversation_history = history
     db.commit()
 
     return {
         "status": "success",
         "current_turn": session.current_turn,
-        "total_turns": session.total_turns,
         "micro_feedback": turn_eval.micro_feedback,
         "star_score": turn_eval.star_score,
-        "next_question": turn_eval.next_question if not is_completed else None,
-        "is_completed": bool(is_completed),
+        "next_question": turn_eval.next_question,
+        "is_completed": False,
+    }
+
+
+@router.post("/end")
+async def end_interview_session(
+    req: EndInterviewRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    End the interview session upon candidate's request and generate comprehensive final scorecard.
+    """
+    session = db.query(InterviewSession).filter(
+        InterviewSession.id == req.session_id,
+        InterviewSession.user_id == user.id,
+    ).first()
+
+    if not session:
+        raise HTTPException(status_code=404, detail="Interview session not found.")
+
+    if session.is_completed and session.final_evaluation:
+        return {
+            "status": "completed",
+            "is_completed": True,
+            "final_evaluation": session.final_evaluation,
+        }
+
+    job_title = session.job.title if session.job else "Software Engineer"
+    history = list(session.conversation_history)
+
+    final_evaluation = await mock_interview_agent.generate_final_scorecard(
+        interview_type=session.interview_type,
+        job_title=job_title,
+        conversation_history=history,
+    )
+
+    session.is_completed = 1
+    session.final_evaluation = final_evaluation
+    db.commit()
+
+    return {
+        "status": "success",
+        "is_completed": True,
         "final_evaluation": final_evaluation,
     }
 

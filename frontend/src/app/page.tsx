@@ -1704,8 +1704,34 @@ export default function CareerCopilotApp() {
               </div>
             </div>
 
-            {/* Tailored Assets Export */}
-            {selectedCRMApp.tailored_cv_data && (
+            {/* Untailored CTA or Generated Tailored Assets */}
+            {!selectedCRMApp.tailored_cv_data ? (
+              <div className="p-4 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="space-y-0.5">
+                  <span className="tag-mono text-xs font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 uppercase">
+                    <Sparkles className="w-4 h-4 text-indigo-600 dark:text-indigo-400" /> Untailored Opportunity
+                  </span>
+                  <p className="text-xs text-slate-500 font-mono">
+                    Run the multi-agent Application Studio to generate a tailored CV, cover letter, and outreach email.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setCrmModalOpen(false);
+                    handleTailorApplication({
+                      id: selectedCRMApp.job_id || selectedCRMApp.id,
+                      title: selectedCRMApp.title,
+                      company: selectedCRMApp.company,
+                      description: selectedCRMApp.description,
+                      location: selectedCRMApp.location,
+                    });
+                  }}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-mono font-bold rounded-lg flex items-center justify-center gap-2 shadow-sm shrink-0"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Run Application Agent →
+                </button>
+              </div>
+            ) : (
               <div className="p-4 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/60 space-y-3">
                 <div className="flex items-center justify-between font-mono">
                   <span className="tag-mono text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5 uppercase">
@@ -1718,29 +1744,46 @@ export default function CareerCopilotApp() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-2 font-mono text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleDownloadCVDocx(selectedCRMApp.tailored_cv_data, activeCV?.parsed_profile?.contact_info?.name || "Candidate")}
+                      className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 font-bold rounded border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Download className="w-3.5 h-3.5 text-indigo-600" /> CV (DOCX)
+                    </button>
+                    {selectedCRMApp.cover_letter && (
+                      <button
+                        onClick={() => handleDownloadCoverLetterDocx(selectedCRMApp.cover_letter, selectedCRMApp.company, selectedCRMApp.title)}
+                        className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 font-bold rounded border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
+                      >
+                        <Download className="w-3.5 h-3.5 text-indigo-600" /> Letter (DOCX)
+                      </button>
+                    )}
+                    {selectedCRMApp.cold_email && (
+                      <button
+                        onClick={() => handleDownloadEmailTxt(selectedCRMApp.cold_email, selectedCRMApp.company)}
+                        className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 font-bold rounded border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
+                      >
+                        <Download className="w-3.5 h-3.5 text-indigo-600" /> Email (TXT)
+                      </button>
+                    )}
+                  </div>
                   <button
-                    onClick={() => handleDownloadCVDocx(selectedCRMApp.tailored_cv_data, activeCV?.parsed_profile?.contact_info?.name || "Candidate")}
-                    className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 font-bold rounded border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
+                    onClick={() => {
+                      setCrmModalOpen(false);
+                      handleTailorApplication({
+                        id: selectedCRMApp.job_id || selectedCRMApp.id,
+                        title: selectedCRMApp.title,
+                        company: selectedCRMApp.company,
+                        description: selectedCRMApp.description,
+                        location: selectedCRMApp.location,
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded flex items-center gap-1.5 shadow-sm ml-auto"
                   >
-                    <Download className="w-3.5 h-3.5 text-indigo-600" /> CV (DOCX)
+                    <Sparkles className="w-3.5 h-3.5" /> Re-Tailor →
                   </button>
-                  {selectedCRMApp.cover_letter && (
-                    <button
-                      onClick={() => handleDownloadCoverLetterDocx(selectedCRMApp.cover_letter, selectedCRMApp.company, selectedCRMApp.title)}
-                      className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 font-bold rounded border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
-                    >
-                      <Download className="w-3.5 h-3.5 text-indigo-600" /> Letter (DOCX)
-                    </button>
-                  )}
-                  {selectedCRMApp.cold_email && (
-                    <button
-                      onClick={() => handleDownloadEmailTxt(selectedCRMApp.cold_email, selectedCRMApp.company)}
-                      className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 font-bold rounded border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
-                    >
-                      <Download className="w-3.5 h-3.5 text-indigo-600" /> Email (TXT)
-                    </button>
-                  )}
                 </div>
               </div>
             )}

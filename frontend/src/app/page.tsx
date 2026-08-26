@@ -38,7 +38,10 @@ import {
   EyeOff,
   BookmarkPlus,
   ExternalLink,
-  Edit3,
+  Terminal,
+  Activity,
+  Cpu,
+  CornerDownRight,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api";
@@ -83,8 +86,8 @@ export default function CareerCopilotApp() {
   const [crmModalOpen, setCrmModalOpen] = useState(false);
   const [statusUpdateLoading, setStatusUpdateLoading] = useState(false);
 
-  // Mock Interview State (Open-Ended)
-  const [interviewType, setInterviewType] = useState("Technical");
+  // Mock Interview State
+  const [interviewType, setInterviewType] = useState<"General" | "Technical" | "Behavioral">("Technical");
   const [interviewDomain, setInterviewDomain] = useState("Artificial Intelligence & Machine Learning");
   const [selectedInterviewJobId, setSelectedInterviewJobId] = useState<string>("");
   const [interviewSession, setInterviewSession] = useState<any>(null);
@@ -98,7 +101,7 @@ export default function CareerCopilotApp() {
     {
       role: "assistant",
       content:
-        "Hello! I am your **Career Roadmap Planner**. Tell me your target role (e.g. *AI Engineer*, *Cloud Architect*) and how many hours per week you can study. I'll design a feasibility-verified learning roadmap for you!",
+        "SYS // INITIALIZED: Career Roadmap Planner online.\n\nSpecify your target career role (e.g. *AI Engineer*, *Cloud Architect*) and weekly study availability (hours/week) to generate a feasibility-verified curriculum.",
     },
   ]);
   const [roadmapInput, setRoadmapInput] = useState("");
@@ -122,7 +125,7 @@ export default function CareerCopilotApp() {
     roadmapChatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [roadmapMessages]);
 
-  // Centralized Authenticated Fetch Helper
+  // Authenticated Fetch Helper
   const authFetch = async (endpoint: string, options: RequestInit = {}, authToken = token) => {
     const headers = new Headers(options.headers || {});
     if (authToken) {
@@ -153,7 +156,7 @@ export default function CareerCopilotApp() {
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setAuthError(data.detail || (authMode === "login" ? "Invalid email or password." : "Registration failed. Please try again."));
+        setAuthError(data.detail || (authMode === "login" ? "Invalid email or password." : "Registration failed."));
         return;
       }
 
@@ -165,7 +168,7 @@ export default function CareerCopilotApp() {
       fetchActiveCV(data.access_token);
       fetchCRM(data.access_token);
     } catch (err: any) {
-      setAuthError("Unable to connect to backend server. Please verify the FastAPI server is running on port 8000.");
+      setAuthError("Unable to connect to backend server. Ensure API is running on port 8000.");
     } finally {
       setAuthLoading(false);
     }
@@ -193,7 +196,7 @@ export default function CareerCopilotApp() {
         }
       }
     } catch (e) {
-      console.log("Active CV fetch note:", e);
+      console.log("CV fetch note:", e);
     }
   };
 
@@ -291,7 +294,7 @@ export default function CareerCopilotApp() {
       });
       if (res.ok) {
         fetchCRM();
-        alert(`Saved "${job.title}" at ${job.company} to your Mini-CRM!`);
+        alert(`Saved "${job.title}" to Mini-CRM!`);
       }
     } catch (err) {
       console.error("Save job error:", err);
@@ -447,7 +450,7 @@ export default function CareerCopilotApp() {
     }
   };
 
-  // Mini-CRM Card Click Handler
+  // Mini-CRM Handlers
   const handleOpenCRMAppDetails = (app: any) => {
     setSelectedCRMApp(app);
     setCrmModalOpen(true);
@@ -475,7 +478,7 @@ export default function CareerCopilotApp() {
   };
 
   const handleDeleteCRMApp = async (appId: string) => {
-    if (confirm("Remove this application from your Mini-CRM?")) {
+    if (confirm("Remove this application from your pipeline?")) {
       try {
         const res = await authFetch(`/application/crm/${appId}`, { method: "DELETE" });
         if (res.ok) {
@@ -488,7 +491,7 @@ export default function CareerCopilotApp() {
     }
   };
 
-  // Open-Ended Interview Handlers
+  // Mock Interview Handlers
   const handleStartInterview = async () => {
     setInterviewLoading(true);
     try {
@@ -503,7 +506,7 @@ export default function CareerCopilotApp() {
           interview_type: interviewType,
           domain: interviewType === "General" ? interviewDomain : null,
           job_id: jobId,
-          total_turns: 999, // Open-ended
+          total_turns: 999,
         }),
       });
       if (res.ok) {
@@ -512,7 +515,7 @@ export default function CareerCopilotApp() {
         setInterviewTurns([{ role: "interviewer", content: data.question }]);
       } else {
         const errData = await res.json().catch(() => ({}));
-        alert(errData.detail || "Failed to start interview.");
+        alert(errData.detail || "Failed to initialize interview.");
       }
     } catch (err) {
       console.error("Interview start error:", err);
@@ -528,7 +531,7 @@ export default function CareerCopilotApp() {
   };
 
   const handleSubmitAnswer = async () => {
-    if (!candidateAnswer.trim() || !interviewSession) return;
+    if (!candidateAnswer.trim() || !interviewSession || interviewLoading || endingInterview) return;
     const answer = candidateAnswer;
     setCandidateAnswer("");
     setInterviewTurns((prev) => [...prev, { role: "candidate", content: answer }]);
@@ -594,7 +597,7 @@ export default function CareerCopilotApp() {
     }
   };
 
-  // Conversational Roadmap Chat Handler
+  // Conversational Roadmap Handler
   const handleSendRoadmapMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roadmapInput.trim() || roadmapLoading) return;
@@ -630,7 +633,7 @@ export default function CareerCopilotApp() {
           ...prev,
           {
             role: "assistant",
-            content: "Sorry, I ran into an error designing your roadmap. Please ensure your study hours are specified!",
+            content: "ERR // Roadmap generation encountered an error. Ensure target role and weekly study hours are specified.",
           },
         ]);
       }
@@ -639,7 +642,7 @@ export default function CareerCopilotApp() {
         ...prev,
         {
           role: "assistant",
-          content: "Failed to connect to the Career Roadmap assistant.",
+          content: "ERR // Connection to Career Roadmap agent failed.",
         },
       ]);
     } finally {
@@ -648,15 +651,13 @@ export default function CareerCopilotApp() {
   };
 
   const handleDeleteAccount = async () => {
-    if (confirm("Are you sure you want to permanently delete your account and all associated data?")) {
+    if (confirm("Permanently delete your account and all associated data?")) {
       try {
         const res = await authFetch("/auth/account", { method: "DELETE" });
         if (res.ok || res.status === 401) {
           handleLogout();
           setSettingsOpen(false);
           alert("Account and records permanently deleted.");
-        } else {
-          alert("Could not delete account. Please try again.");
         }
       } catch (err) {
         console.error("Delete error:", err);
@@ -668,30 +669,35 @@ export default function CareerCopilotApp() {
 
   if (!mounted) return null;
 
-  // Unauthenticated Flow: Clean & Radiant Auth Screen
+  // Unauthenticated Flow: Architectural Gate Screen
   if (!token) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#070b14] flex flex-col items-center justify-center p-4 selection:bg-indigo-500 selection:text-white">
-        <div className="w-full max-w-md">
-          {/* Brand Header */}
-          <div className="text-center mb-8">
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-indigo-600 to-cyan-500 flex items-center justify-center text-white shadow-xl shadow-indigo-500/25 mb-4">
-              <Sparkles className="w-7 h-7" />
+      <div className="min-h-screen bg-white dark:bg-[#07090e] bg-grid-pattern flex flex-col items-center justify-center p-6 text-slate-900 dark:text-slate-100">
+        <div className="w-full max-w-md space-y-6">
+          {/* Header */}
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-[11px] font-mono text-slate-600 dark:text-slate-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>SYS // RUNNING</span>
+              <span className="text-slate-300 dark:text-slate-700">|</span>
+              <span>MULTI-AGENT AI</span>
             </div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Career Copilot</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Autonomous Multi-Agent Career & Job Strategy Platform
+            <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+              Career Copilot
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+              Autonomous Career Strategy & Job Search Platform
             </p>
           </div>
 
-          {/* Auth Card */}
-          <div className="glass-card p-8 bg-white dark:bg-slate-900/90 shadow-xl border border-slate-200 dark:border-slate-800">
-            <div className="flex rounded-xl bg-slate-100 dark:bg-slate-950 p-1 mb-6 border border-slate-200 dark:border-slate-850">
+          {/* Form Card */}
+          <div className="arch-card corner-cross p-8 space-y-6 shadow-xl">
+            <div className="flex border border-slate-200 dark:border-slate-800 rounded-lg p-1 bg-slate-50 dark:bg-slate-950 font-mono text-xs">
               <button
                 onClick={() => { setAuthMode("login"); setAuthError(""); }}
-                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                className={`flex-1 py-1.5 font-bold rounded-md transition-all ${
                   authMode === "login"
-                    ? "bg-white dark:bg-indigo-600 text-indigo-600 dark:text-white shadow-sm"
+                    ? "bg-white dark:bg-indigo-600 text-slate-900 dark:text-white shadow-sm"
                     : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
                 }`}
               >
@@ -699,26 +705,26 @@ export default function CareerCopilotApp() {
               </button>
               <button
                 onClick={() => { setAuthMode("register"); setAuthError(""); }}
-                className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${
+                className={`flex-1 py-1.5 font-bold rounded-md transition-all ${
                   authMode === "register"
-                    ? "bg-white dark:bg-indigo-600 text-indigo-600 dark:text-white shadow-sm"
+                    ? "bg-white dark:bg-indigo-600 text-slate-900 dark:text-white shadow-sm"
                     : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
                 }`}
               >
-                Create Account
+                Register
               </button>
             </div>
 
             {authError && (
-              <div className="mb-4 p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
+              <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs font-mono flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{authError}</span>
               </div>
             )}
 
             <form onSubmit={handleAuthSubmit} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+              <div className="space-y-1">
+                <label className="text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300 block uppercase">
                   Email Address
                 </label>
                 <div className="relative">
@@ -728,14 +734,14 @@ export default function CareerCopilotApp() {
                     required
                     value={authEmail}
                     onChange={(e) => setAuthEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    placeholder="candidate@domain.com"
+                    className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+              <div className="space-y-1">
+                <label className="text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300 block uppercase">
                   Password
                 </label>
                 <div className="relative">
@@ -746,13 +752,12 @@ export default function CareerCopilotApp() {
                     value={authPassword}
                     onChange={(e) => setAuthPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-9 pr-10 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full pl-9 pr-10 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-none"
-                    title={showPassword ? "Hide password" : "Show password"}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -762,51 +767,49 @@ export default function CareerCopilotApp() {
               <button
                 type="submit"
                 disabled={authLoading}
-                className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow-md transition-all flex items-center justify-center gap-2 mt-2"
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white text-xs font-mono font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"
               >
-                {authLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
-                {authMode === "login" ? "Sign In to Career Copilot" : "Register & Start"}
+                {authLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Terminal className="w-4 h-4" />}
+                {authMode === "login" ? "Authenticate ->" : "Create Account ->"}
               </button>
             </form>
-
-            <p className="text-[11px] text-center text-slate-400 mt-5">
-              Secure JWT authentication with full single active CV privacy protection.
-            </p>
           </div>
         </div>
       </div>
     );
   }
 
-  // Authenticated Main Application Surface
+  // Authenticated Main Surface
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#070b14] text-slate-900 dark:text-slate-100 transition-colors">
-      {/* Top Navbar */}
-      <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#0c1220]/90 backdrop-blur-md">
+    <div className="min-h-screen bg-white dark:bg-[#07090e] bg-grid-pattern text-slate-900 dark:text-slate-100 transition-colors">
+      {/* Top Dock Navigation */}
+      <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-[#07090e]/90 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
-              <Sparkles className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-indigo-600 flex items-center justify-center text-white font-mono font-black text-xs shadow-sm">
+              CC
             </div>
             <div>
-              <span className="text-base font-black tracking-tight bg-gradient-to-r from-indigo-600 to-cyan-500 dark:from-indigo-400 dark:to-cyan-300 bg-clip-text text-transparent">
-                Career Copilot
-              </span>
-              <span className="hidden sm:inline-block ml-2 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                Multi-Agent AI
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black tracking-tight text-slate-900 dark:text-white uppercase">
+                  Career Copilot
+                </span>
+                <span className="tag-mono text-[9px] px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> LIVE
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <nav className="hidden md:flex items-center gap-1 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+          {/* Dock Tabs */}
+          <nav className="hidden lg:flex items-center gap-1 bg-slate-100 dark:bg-slate-900/80 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
             {[
-              { id: "cv", label: "CV Analysis", icon: FileText },
-              { id: "jobs", label: "Job Matcher", icon: Search },
-              { id: "tailor", label: "Application Studio", icon: Sparkles },
-              { id: "crm", label: "Mini-CRM", icon: Layers },
-              { id: "interview", label: "Mock Interview", icon: MessageSquare },
-              { id: "roadmap", label: "Roadmap Planner", icon: Compass },
+              { id: "cv", label: "01. CV Audit", icon: FileText },
+              { id: "jobs", label: "02. Matcher", icon: Search },
+              { id: "tailor", label: "03. Studio", icon: Sparkles },
+              { id: "crm", label: "04. Mini-CRM", icon: Layers },
+              { id: "interview", label: "05. Interview", icon: MessageSquare },
+              { id: "roadmap", label: "06. Roadmap", icon: Compass },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -814,10 +817,10 @@ export default function CareerCopilotApp() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  className={`nav-pill flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold transition-all ${
                     isActive
-                      ? "bg-white dark:bg-indigo-600 text-indigo-600 dark:text-white shadow-sm"
-                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                      ? "bg-white dark:bg-indigo-600 text-slate-900 dark:text-white shadow-sm"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -827,9 +830,8 @@ export default function CareerCopilotApp() {
             })}
           </nav>
 
-          {/* User Status & Actions */}
+          {/* Controls */}
           <div className="flex items-center gap-2">
-            {/* Theme Toggle */}
             <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800">
               <button
                 onClick={() => setTheme("light")}
@@ -856,7 +858,7 @@ export default function CareerCopilotApp() {
 
             <button
               onClick={() => setSettingsOpen(true)}
-              className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
               title="Settings"
             >
               <SettingsIcon className="w-4 h-4" />
@@ -864,8 +866,8 @@ export default function CareerCopilotApp() {
 
             <button
               onClick={handleLogout}
-              className="p-2 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
-              title="Log Out"
+              className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+              title="Sign Out"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -873,41 +875,46 @@ export default function CareerCopilotApp() {
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* TAB 1: CV ANALYSIS */}
+      {/* Main Surface */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* TAB 1: CV AUDIT */}
         {activeTab === "cv" && (
-          <div className="space-y-8">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">CV Ingestion & General ATS Readiness</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Upload your CV (PDF/DOCX) or paste raw text. The engine runs a deterministic 100-point audit without hallucinations.
-              </p>
+          <div className="space-y-6">
+            <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
+              <span className="tag-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest block">
+                [MODULE // 01: CV ANALYSIS & ATS AUDIT]
+              </span>
+              <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white mt-1">
+                Deterministic 100-Point Resume Audit
+              </h2>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Upload Card */}
-              <div className="glass-card p-6 lg:col-span-1 space-y-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                <h3 className="text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                  <FileText className="w-4 h-4 text-indigo-600" />
-                  Single Active CV Upload
-                </h3>
-                <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl p-6 text-center hover:border-indigo-500 transition-colors bg-slate-50/50 dark:bg-slate-950/50">
+              <div className="arch-card corner-cross p-6 space-y-5 lg:col-span-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-indigo-600" /> Active Resume File
+                  </h3>
+                  <span className="tag-mono text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500">
+                    PDF / DOCX
+                  </span>
+                </div>
+
+                <div className="border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-6 text-center hover:border-indigo-500 transition-colors bg-slate-50/50 dark:bg-slate-950/50">
                   <input
                     type="file"
                     accept=".pdf,.docx,.doc,.txt"
                     onChange={handleFileUpload}
                     className="hidden"
-                    id="cv-upload-input"
+                    id="cv-file-input"
                   />
-                  <label htmlFor="cv-upload-input" className="cursor-pointer flex flex-col items-center gap-2">
-                    <div className="w-12 h-12 rounded-full bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                      <FileText className="w-6 h-6" />
-                    </div>
-                    <span className="text-xs font-semibold text-slate-900 dark:text-slate-200">
-                      Click to upload resume file
+                  <label htmlFor="cv-file-input" className="cursor-pointer flex flex-col items-center gap-2">
+                    <FileText className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
+                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      Upload Resume File
                     </span>
-                    <span className="text-[11px] text-slate-400">Supports PDF (with OCR fallback) and DOCX</span>
+                    <span className="tag-mono text-[10px] text-slate-400">PDF (with OCR fallback) & DOCX</span>
                   </label>
                 </div>
 
@@ -915,45 +922,47 @@ export default function CareerCopilotApp() {
                   <div className="absolute inset-0 flex items-center">
                     <div className="w-full border-t border-slate-200 dark:border-slate-800" />
                   </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-white dark:bg-slate-900 px-2 text-slate-400 font-semibold">Or Paste Text</span>
+                  <div className="relative flex justify-center text-[10px] uppercase font-mono">
+                    <span className="bg-white dark:bg-[#0c101a] px-2 text-slate-400">Or Paste Text</span>
                   </div>
                 </div>
 
                 <textarea
                   value={pasteText}
                   onChange={(e) => setPasteText(e.target.value)}
-                  placeholder="Paste your CV text here..."
+                  placeholder="Paste resume text directly..."
                   rows={4}
-                  className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
                 <button
                   onClick={handlePasteCV}
                   disabled={cvLoading || !pasteText.trim()}
-                  className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow transition-all"
+                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-mono font-bold rounded-lg shadow-sm transition-all"
                 >
-                  {cvLoading ? "Analyzing..." : "Analyze Pasted Text"}
+                  {cvLoading ? "Analyzing..." : "Analyze Pasted Text ->"}
                 </button>
               </div>
 
-              {/* General ATS Score Display */}
-              <div className="glass-card p-6 lg:col-span-2 space-y-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              {/* Score Display Card */}
+              <div className="arch-card corner-cross p-6 space-y-6 lg:col-span-2">
                 {activeCV?.general_ats_score ? (
                   <div>
-                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-3">
                       <div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                          Active Resume: {activeCV.filename}
+                        <span className="tag-mono text-[10px] font-bold text-slate-400 uppercase">
+                          ACTIVE FILE: {activeCV.filename}
                         </span>
-                        <h2 className="text-xl font-bold mt-0.5 text-slate-900 dark:text-white">Resume Readiness Audit</h2>
+                        <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+                          Readiness Score Breakdown
+                        </h3>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="text-right">
-                          <div className="text-3xl font-extrabold text-indigo-600 dark:text-indigo-400">
+                          <div className="text-4xl font-black font-mono tracking-tight text-indigo-600 dark:text-indigo-400">
                             {activeCV.general_ats_score.overall_score}
-                            <span className="text-sm text-slate-400 font-normal">/100</span>
+                            <span className="text-sm font-normal text-slate-400">/100</span>
                           </div>
-                          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                          <span className="tag-mono text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
                             Deterministic Score
                           </span>
                         </div>
@@ -968,9 +977,9 @@ export default function CareerCopilotApp() {
                         { label: "Quantifiable Impact", val: activeCV.general_ats_score.category_scores.quantifiable_impact, max: 25 },
                         { label: "Formatting & Skills", val: activeCV.general_ats_score.category_scores.formatting_and_skills, max: 25 },
                       ].map((cat, i) => (
-                        <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                          <span className="text-[11px] text-slate-500 dark:text-slate-400 block">{cat.label}</span>
-                          <span className="text-lg font-black text-slate-900 dark:text-slate-100">
+                        <div key={i} className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
+                          <span className="tag-mono text-[10px] text-slate-500 uppercase block">{cat.label}</span>
+                          <span className="text-xl font-black font-mono text-slate-900 dark:text-slate-100">
                             {cat.val}<span className="text-xs text-slate-400 font-normal">/{cat.max}</span>
                           </span>
                         </div>
@@ -979,34 +988,34 @@ export default function CareerCopilotApp() {
 
                     {/* Feedback Checklist */}
                     <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
-                        Actionable Improvement Checklist
+                      <h4 className="tag-mono text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-3">
+                        Improvement Action Items
                       </h4>
                       <div className="space-y-2">
                         {activeCV.general_ats_score.feedback_checklist?.length > 0 ? (
                           activeCV.general_ats_score.feedback_checklist.map((fb: string, i: number) => (
-                            <div key={i} className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900/40">
+                            <div key={i} className="flex items-start gap-2 text-xs font-mono text-amber-800 dark:text-amber-300 bg-amber-50/70 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900/40">
                               <AlertCircle className="w-4 h-4 shrink-0 text-amber-500 mt-0.5" />
                               <span>{fb}</span>
                             </div>
                           ))
                         ) : (
-                          <div className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900/40">
+                          <div className="flex items-center gap-2 text-xs font-mono text-emerald-700 dark:text-emerald-300 bg-emerald-50/70 dark:bg-emerald-950/30 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900/40">
                             <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                            <span>Your CV meets all baseline ATS hygiene, action verb, and metrics criteria!</span>
+                            <span>100% ATS hygiene criteria satisfied.</span>
                           </div>
                         )}
                       </div>
                     </div>
 
-                    {/* Detected Skills */}
+                    {/* Extracted Skills */}
                     <div className="mt-6">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-                        Detected Skills ({activeCV.parsed_profile?.skills_inventory?.length || 0})
+                      <h4 className="tag-mono text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 mb-2">
+                        Detected Skills Inventory ({activeCV.parsed_profile?.skills_inventory?.length || 0})
                       </h4>
                       <div className="flex flex-wrap gap-1.5">
                         {activeCV.parsed_profile?.skills_inventory?.map((s: string, i: number) => (
-                          <span key={i} className="px-2.5 py-1 text-xs rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                          <span key={i} className="tag-mono text-[10px] px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                             {s}
                           </span>
                         ))}
@@ -1014,10 +1023,10 @@ export default function CareerCopilotApp() {
                     </div>
                   </div>
                 ) : (
-                  <div className="py-16 text-center text-slate-400">
-                    <FileText className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
-                    <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">No CV analyzed yet.</p>
-                    <p className="text-xs text-slate-400 mt-1">Upload a resume file to inspect your ATS readiness score.</p>
+                  <div className="py-16 text-center text-slate-400 font-mono text-xs">
+                    <FileText className="w-10 h-10 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
+                    <p className="font-bold text-slate-700 dark:text-slate-300">NO CV PROFILE LOADED</p>
+                    <p className="text-slate-400 mt-1">Upload a resume to initialize the ATS scoring pipeline.</p>
                   </div>
                 )}
               </div>
@@ -1025,18 +1034,20 @@ export default function CareerCopilotApp() {
           </div>
         )}
 
-        {/* TAB 2: JOB SEARCH & MATCHER */}
+        {/* TAB 2: JOB MATCHER */}
         {activeTab === "jobs" && (
           <div className="space-y-6">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Market Research & Job Matcher</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Adzuna dynamic backfill + Tavily web search delivers 7–10 deduplicated postings per search with instant company intelligence.
-              </p>
+            <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
+              <span className="tag-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest block">
+                [MODULE // 02: MARKET RESEARCH & HYBRID MATCHING]
+              </span>
+              <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white mt-1">
+                Adzuna & Tavily Deduplicated Market Radar
+              </h2>
             </div>
 
             {/* Search Bar */}
-            <div className="glass-card p-4 flex flex-col sm:flex-row gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            <div className="arch-card p-3 flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                 <input
@@ -1044,34 +1055,34 @@ export default function CareerCopilotApp() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Target Role or Skills (e.g. AI Engineer, Python Alexandria, React Remote)..."
-                  className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
               <button
                 onClick={handleSearchJobs}
                 disabled={jobsLoading}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-2 shadow"
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white text-xs font-mono font-bold rounded-lg flex items-center justify-center gap-2 shadow-sm"
               >
                 {jobsLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                Search 7–10 Jobs
+                Execute Search ->
               </button>
             </div>
 
-            {/* Job Cards Grid */}
+            {/* Job Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {jobs.map((job, idx) => (
-                <div key={idx} className="glass-card p-5 flex flex-col justify-between space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-500 transition-all">
+                <div key={idx} className="arch-card corner-cross p-5 flex flex-col justify-between space-y-4">
                   <div>
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{job.title}</h3>
-                        <span className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                          <Building className="w-3.5 h-3.5" /> {job.company} • <MapPin className="w-3.5 h-3.5" /> {job.location || "Remote"}
+                        <span className="tag-mono text-[10px] text-slate-500 flex items-center gap-1 mt-1">
+                          <Building className="w-3 h-3" /> {job.company} • <MapPin className="w-3 h-3" /> {job.location || "Remote"}
                         </span>
                       </div>
                       {job.match_score !== undefined && (
-                        <div className="px-2.5 py-1 rounded-full text-xs font-black bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                          {job.match_score}% Match
+                        <div className="tag-mono px-2.5 py-1 rounded-md text-xs font-black bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                          {job.match_score}% MATCH
                         </div>
                       )}
                     </div>
@@ -1080,165 +1091,151 @@ export default function CareerCopilotApp() {
                       {job.description}
                     </p>
 
-                    {/* Matched & Missing Skills */}
                     {job.matched_skills && job.matched_skills.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-1">
                         {job.matched_skills.slice(0, 4).map((ms: string, i: number) => (
-                          <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+                          <span key={i} className="tag-mono text-[9px] px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
                             ✓ {ms}
-                          </span>
-                        ))}
-                        {job.missing_skills?.slice(0, 2).map((ms: string, i: number) => (
-                          <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900">
-                            + {ms}
                           </span>
                         ))}
                       </div>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 gap-2">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800 gap-2">
+                    <div className="flex items-center gap-2 font-mono text-xs">
                       <button
                         onClick={() => handleSaveJobToCRM(job)}
-                        className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center gap-1"
+                        className="px-2 py-1 rounded border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center gap-1"
                         title="Save Job to Mini-CRM"
                       >
                         <BookmarkPlus className="w-3.5 h-3.5 text-indigo-600" /> Save
                       </button>
                       <button
                         onClick={() => handleFetchInsights(job)}
-                        className="text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 flex items-center gap-1"
+                        className="px-2 py-1 text-slate-500 hover:text-indigo-600 flex items-center gap-1"
                       >
                         <Building className="w-3.5 h-3.5" /> Insights
                       </button>
                     </div>
                     <button
                       onClick={() => handleTailorApplication(job)}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow"
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-mono font-bold rounded-md flex items-center gap-1.5 shadow-sm"
                     >
-                      <Sparkles className="w-3.5 h-3.5" /> Tailor Full App
+                      <Sparkles className="w-3.5 h-3.5" /> Tailor App ->
                     </button>
                   </div>
                 </div>
               ))}
             </div>
-
-            {jobs.length === 0 && !jobsLoading && (
-              <div className="glass-card py-16 text-center text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                <Search className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
-                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Ready to search market postings.</p>
-                <p className="text-xs text-slate-400 mt-1">Type your desired role above to retrieve live openings.</p>
-              </div>
-            )}
           </div>
         )}
 
-        {/* TAB 3: APPLICATION STUDIO (FULL CV + EXPORTS) */}
+        {/* TAB 3: APPLICATION STUDIO */}
         {activeTab === "tailor" && (
           <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-4">
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Application Studio (Fact-Checked Full Package)</h1>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Full tailored CV, personalized cover letter, and hiring manager outreach. Verified by Critic against your original CV.
-                </p>
+                <span className="tag-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest block">
+                  [MODULE // 03: APPLICATION FACT STUDIO]
+                </span>
+                <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white mt-1">
+                  Fact-Checked Full Resume & Document Suite
+                </h2>
               </div>
               {tailoredApp && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
                   <button
                     onClick={() => handleDownloadCVDocx(tailoredApp.tailored_cv_data, activeCV?.parsed_profile?.contact_info?.name || "Candidate")}
-                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 shadow-sm"
+                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 shadow-sm"
                   >
                     <Download className="w-3.5 h-3.5 text-indigo-600" /> CV (DOCX)
                   </button>
                   <button
                     onClick={() => handleDownloadCoverLetterDocx(tailoredApp.cover_letter, selectedJob?.company || "Company", selectedJob?.title || "Role")}
-                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 shadow-sm"
+                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 shadow-sm"
                   >
-                    <Download className="w-3.5 h-3.5 text-indigo-600" /> Cover Letter (DOCX)
+                    <Download className="w-3.5 h-3.5 text-indigo-600" /> Letter (DOCX)
                   </button>
                   <button
                     onClick={() => handleDownloadEmailTxt(tailoredApp.cold_email, selectedJob?.company || "Hiring_Manager")}
-                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 shadow-sm"
+                    className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 shadow-sm"
                   >
-                    <Download className="w-3.5 h-3.5 text-indigo-600" /> Cold Email (TXT)
+                    <Download className="w-3.5 h-3.5 text-indigo-600" /> Email (TXT)
                   </button>
                   <button
                     onClick={handleSaveToCRM}
-                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow"
+                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-md shadow-sm"
                   >
-                    Save to Mini-CRM
+                    Save to CRM ->
                   </button>
                 </div>
               )}
             </div>
 
             {tailorLoading ? (
-              <div className="glass-card py-16 text-center space-y-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="arch-card py-16 text-center space-y-3 font-mono">
                 <RefreshCw className="w-8 h-8 mx-auto animate-spin text-indigo-600" />
-                <p className="text-sm font-bold text-slate-900 dark:text-white">Tailoring full CV & running Fact Critic reflection loop...</p>
-                <p className="text-xs text-slate-400">Verifying zero hallucinations against your original CV.</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-white">GENERATING FULL CV & FACT CRITIC LOOP...</p>
+                <p className="text-xs text-slate-400">Verifying zero hallucinations against candidate profile.</p>
               </div>
             ) : tailoredApp ? (
               <div className="space-y-6">
                 {/* Fact Critic Badge */}
-                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 flex items-center justify-between">
+                <div className="p-4 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                     <div>
-                      <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 block">
-                        Fact Critic Validation: {tailoredApp.critic_passed ? "PASSED" : "REVIEWED"} (Attempt {tailoredApp.critic_attempts}/3)
+                      <span className="tag-mono text-xs font-bold text-emerald-900 dark:text-emerald-200 block">
+                        FACT CRITIC: {tailoredApp.critic_passed ? "PASSED" : "REVIEWED"} (ATTEMPT {tailoredApp.critic_attempts}/3)
                       </span>
                       <span className="text-xs text-emerald-700 dark:text-emerald-400">
-                        100% verified against original experience. Zero invented skills or dates.
+                        100% verified against original experience. Zero invented skills or credentials.
                       </span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xs text-slate-500">ATS Match Delta:</span>
+                  <div className="text-right font-mono">
+                    <span className="text-[10px] text-slate-500 block">ATS MATCH DELTA:</span>
                     <div className="text-sm font-black text-slate-900 dark:text-slate-100">
-                      {tailoredApp.ats_score_before}% → <span className="text-emerald-600">{tailoredApp.ats_score_after}%</span>
+                      {tailoredApp.ats_score_before}% -> <span className="text-emerald-600">{tailoredApp.ats_score_after}%</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Full Tailored CV View */}
-                  <div className="glass-card p-5 space-y-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-indigo-600" /> Full Tailored CV
+                  {/* Full Tailored CV */}
+                  <div className="arch-card corner-cross p-5 space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                      <h3 className="tag-mono text-xs font-bold text-slate-600 dark:text-slate-400 uppercase flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-indigo-600" /> Full Tailored Resume
                       </h3>
                       <button
                         onClick={() => handleDownloadCVDocx(tailoredApp.tailored_cv_data, activeCV?.parsed_profile?.contact_info?.name || "Candidate")}
-                        className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
+                        className="tag-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
                       >
-                        <Download className="w-3.5 h-3.5" /> Download DOCX
+                        <Download className="w-3.5 h-3.5" /> DOCX
                       </button>
                     </div>
 
-                    {/* Tailored Professional Summary */}
                     {tailoredApp.tailored_cv_data?.professional_summary && (
                       <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                        <strong className="text-xs font-bold text-slate-900 dark:text-slate-100 block mb-1">
-                          Tailored Professional Summary:
+                        <strong className="tag-mono text-[10px] font-bold text-slate-700 dark:text-slate-300 block mb-1 uppercase">
+                          Targeted Professional Summary:
                         </strong>
-                        <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                        <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
                           {tailoredApp.tailored_cv_data.professional_summary}
                         </p>
                       </div>
                     )}
 
-                    {/* Highlighted Skills */}
                     {tailoredApp.tailored_cv_data?.skills?.length > 0 && (
                       <div>
-                        <strong className="text-xs font-bold text-slate-900 dark:text-slate-100 block mb-1.5">
-                          Targeted Skill Alignment:
+                        <strong className="tag-mono text-[10px] font-bold text-slate-700 dark:text-slate-300 block mb-1.5 uppercase">
+                          Emphasized Technical Skills:
                         </strong>
                         <div className="flex flex-wrap gap-1">
                           {tailoredApp.tailored_cv_data.skills.map((s: string, i: number) => (
-                            <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                            <span key={i} className="tag-mono text-[9px] px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                               {s}
                             </span>
                           ))}
@@ -1246,10 +1243,9 @@ export default function CareerCopilotApp() {
                       </div>
                     )}
 
-                    {/* Tailored Work Experience */}
                     <div className="space-y-3">
-                      <strong className="text-xs font-bold text-slate-900 dark:text-slate-100 block">
-                        Work Experience:
+                      <strong className="tag-mono text-[10px] font-bold text-slate-700 dark:text-slate-300 block uppercase">
+                        Tailored Experience:
                       </strong>
                       {tailoredApp.tailored_cv_data?.experience?.map((exp: any, i: number) => (
                         <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
@@ -1264,30 +1260,16 @@ export default function CareerCopilotApp() {
                         </div>
                       ))}
                     </div>
-
-                    {/* Education & Certs */}
-                    {tailoredApp.tailored_cv_data?.education?.length > 0 && (
-                      <div>
-                        <strong className="text-xs font-bold text-slate-900 dark:text-slate-100 block mb-1">
-                          Education & Credentials:
-                        </strong>
-                        {tailoredApp.tailored_cv_data.education.map((edu: any, i: number) => (
-                          <p key={i} className="text-xs text-slate-600 dark:text-slate-400">
-                            • {edu.degree} — {edu.institution} {edu.year ? `(${edu.year})` : ""}
-                          </p>
-                        ))}
-                      </div>
-                    )}
                   </div>
 
-                  {/* Cover Letter & Email */}
-                  <div className="glass-card p-5 space-y-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  {/* Letter & Outreach Email */}
+                  <div className="arch-card corner-cross p-5 space-y-5">
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Cover Letter</h3>
+                        <h3 className="tag-mono text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Cover Letter</h3>
                         <button
                           onClick={() => handleDownloadCoverLetterDocx(tailoredApp.cover_letter, selectedJob?.company || "Company", selectedJob?.title || "Role")}
-                          className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
+                          className="tag-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
                         >
                           <Download className="w-3.5 h-3.5" /> DOCX
                         </button>
@@ -1296,16 +1278,16 @@ export default function CareerCopilotApp() {
                         value={tailoredApp.cover_letter}
                         onChange={(e) => setTailoredApp({ ...tailoredApp, cover_letter: e.target.value })}
                         rows={8}
-                        className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                        className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       />
                     </div>
 
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Cold Outreach Email</h3>
+                        <h3 className="tag-mono text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Cold Outreach Email</h3>
                         <button
                           onClick={() => handleDownloadEmailTxt(tailoredApp.cold_email, selectedJob?.company || "Hiring_Manager")}
-                          className="text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
+                          className="tag-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
                         >
                           <Download className="w-3.5 h-3.5" /> TXT
                         </button>
@@ -1314,40 +1296,43 @@ export default function CareerCopilotApp() {
                         value={tailoredApp.cold_email}
                         onChange={(e) => setTailoredApp({ ...tailoredApp, cold_email: e.target.value })}
                         rows={5}
-                        className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                        className="w-full text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                       />
                     </div>
                   </div>
                 </div>
               </div>
             ) : (
-              <div className="glass-card py-16 text-center text-slate-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                <Sparkles className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
-                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">Select a job posting in Job Matcher to tailor your full application.</p>
+              <div className="arch-card py-16 text-center text-slate-400 font-mono text-xs">
+                <Sparkles className="w-10 h-10 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
+                <p className="font-bold text-slate-700 dark:text-slate-300">SELECT A JOB POSTING</p>
+                <p className="text-slate-400 mt-1">Open Job Matcher and click 'Tailor App' to generate documents.</p>
               </div>
             )}
           </div>
         )}
 
-        {/* TAB 4: MINI-CRM (ALL 6 STAGES WITH DETAILS MODAL) */}
+        {/* TAB 4: MINI-CRM */}
         {activeTab === "crm" && (
           <div className="space-y-6">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Application Pipeline (Mini-CRM)</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Manage all your saved, tailored, and active applications. Click any card to inspect full JD details or export previously generated tailored documents.
-              </p>
+            <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
+              <span className="tag-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest block">
+                [MODULE // 04: PIPELINE CRM]
+              </span>
+              <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white mt-1">
+                6-Stage Application Pipeline
+              </h2>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
               {["Saved", "Tailored", "Applied", "Interviewing", "Offered", "Rejected"].map((colStatus) => {
                 const colApps = crmApplications.filter((a) => a.status === colStatus);
                 return (
-                  <div key={colStatus} className="glass-card p-3 space-y-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                  <div key={colStatus} className="arch-card corner-cross p-3 space-y-3 flex flex-col justify-between">
                     <div>
-                      <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">{colStatus}</span>
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                        <span className="tag-mono text-[10px] font-bold uppercase text-slate-600 dark:text-slate-400">{colStatus}</span>
+                        <span className="tag-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800">
                           {colApps.length}
                         </span>
                       </div>
@@ -1360,18 +1345,16 @@ export default function CareerCopilotApp() {
                             className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 hover:border-indigo-500 cursor-pointer transition-all space-y-1"
                           >
                             <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 line-clamp-1">{app.title}</h4>
-                            <span className="text-[11px] text-slate-500 block line-clamp-1">{app.company}</span>
-                            {app.ats_score_after ? (
-                              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 block">
+                            <span className="tag-mono text-[10px] text-slate-500 block line-clamp-1">{app.company}</span>
+                            {app.ats_score_after && (
+                              <span className="tag-mono text-[9px] font-bold text-emerald-600 dark:text-emerald-400 block">
                                 ATS: {app.ats_score_after}%
                               </span>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 block">Click for details</span>
                             )}
                           </div>
                         ))}
                         {colApps.length === 0 && (
-                          <p className="text-[11px] text-slate-400 text-center py-6">Empty</p>
+                          <p className="tag-mono text-[10px] text-slate-400 text-center py-6">-- EMPTY --</p>
                         )}
                       </div>
                     </div>
@@ -1382,166 +1365,156 @@ export default function CareerCopilotApp() {
           </div>
         )}
 
-        {/* TAB 5: MOCK INTERVIEW (OPEN-ENDED) */}
+        {/* TAB 5: MOCK INTERVIEW */}
         {activeTab === "interview" && (
           <div className="space-y-6">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Interactive Mock Interview Simulator</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Open-ended simulation with dynamic micro-feedback. Continue as long as you like and conclude whenever you are ready.
-              </p>
+            <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
+              <span className="tag-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest block">
+                [MODULE // 05: INTERVIEW SIMULATOR]
+              </span>
+              <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white mt-1">
+                Stateful Mock Interview & STAR Scorecard
+              </h2>
             </div>
 
             {!interviewSession ? (
-              <div className="glass-card p-8 max-w-xl mx-auto space-y-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                <div className="text-center space-y-2">
-                  <div className="w-12 h-12 mx-auto rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                    <MessageSquare className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Configure Your Mock Interview</h3>
-                  <p className="text-xs text-slate-500">Choose your interview focus, target domain, or target job opportunity.</p>
+              <div className="arch-card corner-cross p-8 max-w-xl mx-auto space-y-5">
+                <div className="text-center space-y-1">
+                  <MessageSquare className="w-8 h-8 mx-auto text-indigo-600" />
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Configure Interview Protocol</h3>
+                  <p className="tag-mono text-[11px] text-slate-500">Select focus mode and target parameters.</p>
                 </div>
                 
                 {/* Mode Selector */}
-                <div className="flex justify-center gap-2">
-                  {["General", "Technical", "Behavioral"].map((mode) => (
+                <div className="flex border border-slate-200 dark:border-slate-800 rounded-lg p-1 bg-slate-50 dark:bg-slate-950 font-mono text-xs">
+                  {(["General", "Technical", "Behavioral"] as const).map((mode) => (
                     <button
                       key={mode}
                       onClick={() => setInterviewType(mode)}
-                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                      className={`flex-1 py-1.5 font-bold rounded-md transition-all ${
                         interviewType === mode
-                          ? "bg-indigo-600 text-white shadow"
-                          : "bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-850"
+                          ? "bg-white dark:bg-indigo-600 text-slate-900 dark:text-white shadow-sm"
+                          : "text-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
                       }`}
                     >
-                      {mode} Mode
+                      {mode}
                     </button>
                   ))}
                 </div>
 
-                {/* Mode-Specific Configuration Inputs */}
                 {interviewType === "General" && (
-                  <div className="text-left space-y-1.5 pt-2">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                  <div className="text-left space-y-1">
+                    <label className="tag-mono text-[10px] font-bold uppercase text-slate-700 dark:text-slate-300 block">
                       Target Interview Domain / Focus Field:
                     </label>
                     <input
                       type="text"
                       value={interviewDomain}
                       onChange={(e) => setInterviewDomain(e.target.value)}
-                      placeholder="e.g. Machine Learning, Cloud Architecture, Fullstack Development, DevOps..."
-                      className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      placeholder="e.g. Machine Learning, Cloud Architecture, DevOps..."
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                     />
-                    <p className="text-[11px] text-slate-500">
-                      The interviewer will evaluate core concepts, career background, and communication skills in this field.
-                    </p>
                   </div>
                 )}
 
                 {(interviewType === "Technical" || interviewType === "Behavioral") && (
-                  <div className="text-left space-y-1.5 pt-2">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
-                      Target Job Opportunity (from your Mini-CRM pipeline or Search):
+                  <div className="text-left space-y-1">
+                    <label className="tag-mono text-[10px] font-bold uppercase text-slate-700 dark:text-slate-300 block">
+                      Target Job Opportunity (from CRM Pipeline):
                     </label>
                     <select
                       value={selectedInterviewJobId}
                       onChange={(e) => setSelectedInterviewJobId(e.target.value)}
-                      className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                     >
-                      <option value="">-- Choose a job listing --</option>
+                      <option value="">-- Select Opportunity --</option>
                       {crmApplications.map((app) => (
                         <option key={app.id} value={app.job_id}>
-                          {app.title} — {app.company} (CRM: {app.status})
+                          {app.title} — {app.company} ({app.status})
                         </option>
                       ))}
                       {jobs.filter((j) => !crmApplications.some((a) => a.job_id === j.id)).map((j) => (
                         <option key={j.id} value={j.id}>
-                          {j.title} — {j.company} (Job Matcher Result)
+                          {j.title} — {j.company} (Search Result)
                         </option>
                       ))}
                     </select>
-                    <p className="text-[11px] text-slate-500">
-                      {interviewType === "Technical"
-                        ? "Probes technical system design, architecture, and coding tradeoffs specifically for this role against your CV."
-                        : "Probes your past CV achievements against this job's culture and role requirements using the STAR method."}
-                    </p>
                   </div>
                 )}
 
                 <button
                   onClick={handleStartInterview}
                   disabled={interviewLoading}
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow transition-all flex items-center justify-center gap-2"
+                  className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-mono font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"
                 >
-                  {interviewLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
-                  Start Mock Interview
+                  {interviewLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Terminal className="w-4 h-4" />}
+                  Initialize Interview Session ->
                 </button>
               </div>
             ) : (
-              <div className="glass-card p-6 space-y-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-                  <span className="text-xs font-bold uppercase text-indigo-600 dark:text-indigo-400">
-                    {interviewSession.interview_type} Interview — Turn {interviewSession.current_turn || 1}
+              <div className="arch-card corner-cross p-6 space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
+                  <span className="tag-mono text-xs font-bold uppercase text-indigo-600 dark:text-indigo-400">
+                    [INTERVIEW // {interviewSession.interview_type} — TURN {interviewSession.current_turn || 1}]
                   </span>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 font-mono text-xs">
                     {!interviewSession.is_completed ? (
                       <button
                         onClick={handleEndInterview}
                         disabled={endingInterview}
-                        className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all"
+                        className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900 font-bold rounded-md flex items-center gap-1.5"
                       >
                         {endingInterview ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <StopCircle className="w-3.5 h-3.5" />}
-                        Conclude Interview & View Scorecard
+                        Conclude & Scorecard
                       </button>
                     ) : (
-                      <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-full">
-                        Completed
+                      <span className="tag-mono text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-md">
+                        COMPLETED
                       </span>
                     )}
                     <button
                       onClick={handleExitInterview}
-                      className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-all"
-                      title="Exit session and return to setup"
+                      className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-1.5"
                     >
-                      <LogOut className="w-3.5 h-3.5" /> Exit Session
+                      <LogOut className="w-3.5 h-3.5" /> Exit
                     </button>
                   </div>
                 </div>
 
-                {/* Turns Chat Box */}
+                {/* Conversation Transcript */}
                 <div className="space-y-4 max-h-[480px] overflow-y-auto pr-2">
                   {interviewTurns.map((turn, i) => (
                     <div
                       key={i}
-                      className={`p-4 rounded-xl text-xs ${
+                      className={`p-4 rounded-lg text-xs leading-relaxed ${
                         turn.role === "interviewer"
-                          ? "bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60"
+                          ? "bg-slate-50 dark:bg-slate-950/90 border border-slate-200 dark:border-slate-800"
                           : turn.role === "feedback"
-                          ? "bg-amber-50/80 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/50"
-                          : "bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 ml-8"
+                          ? "bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50"
+                          : "bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/40 ml-8"
                       }`}
                     >
-                      <strong className="block font-bold mb-1 text-slate-900 dark:text-slate-100">
-                        {turn.role === "interviewer" ? "🎙️ Interviewer:" : turn.role === "feedback" ? "💡 Micro-Feedback:" : "👤 You:"}
+                      <strong className="tag-mono block font-bold mb-1 uppercase text-slate-900 dark:text-slate-100">
+                        {turn.role === "interviewer" ? "[INTERVIEWER]" : turn.role === "feedback" ? "[MICRO-FEEDBACK]" : "[CANDIDATE]"}
                       </strong>
-                      <p className="leading-relaxed text-slate-800 dark:text-slate-200">{turn.content}</p>
+                      <p className="text-slate-800 dark:text-slate-200">{turn.content}</p>
                     </div>
                   ))}
                 </div>
 
-                {/* Scorecard on Completion */}
+                {/* Scorecard */}
                 {interviewSession.final_evaluation && (
-                  <div className="p-5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/80 space-y-4">
+                  <div className="p-5 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/80 space-y-4">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
-                        <Award className="w-4 h-4" /> Final Evaluation Scorecard
+                      <h4 className="tag-mono text-sm font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
+                        <Award className="w-4 h-4" /> [FINAL EVALUATION SCORECARD]
                       </h4>
-                      <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                      <span className="font-mono text-2xl font-black text-emerald-600 dark:text-emerald-400">
                         {interviewSession.final_evaluation.overall_score}/100
                       </span>
                     </div>
-                    <p className="text-xs text-slate-700 dark:text-slate-300 font-semibold">
-                      Recommendation: <strong className="text-emerald-600">{interviewSession.final_evaluation.hiring_recommendation}</strong>
+                    <p className="text-xs font-mono text-slate-700 dark:text-slate-300">
+                      Recommendation: <strong className="text-emerald-600 uppercase">{interviewSession.final_evaluation.hiring_recommendation}</strong>
                     </p>
                     <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                       {interviewSession.final_evaluation.star_method_assessment || interviewSession.final_evaluation.technical_depth_assessment}
@@ -1550,9 +1523,9 @@ export default function CareerCopilotApp() {
                     <div className="pt-2 border-t border-emerald-200 dark:border-emerald-900/50 flex justify-end">
                       <button
                         onClick={handleExitInterview}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow"
+                        className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 text-white font-mono text-xs font-bold rounded-md flex items-center gap-1.5 shadow"
                       >
-                        <ArrowRight className="w-3.5 h-3.5" /> Exit Interview & Start New Session
+                        <ArrowRight className="w-3.5 h-3.5" /> Exit Session & Return ->
                       </button>
                     </div>
                   </div>
@@ -1563,15 +1536,15 @@ export default function CareerCopilotApp() {
                     <textarea
                       value={candidateAnswer}
                       onChange={(e) => setCandidateAnswer(e.target.value)}
-                      placeholder={endingInterview ? "Concluding interview and compiling scorecard..." : "Type your response to the interviewer..."}
+                      placeholder={endingInterview ? "Concluding interview and compiling scorecard..." : "Type response to interviewer..."}
                       disabled={interviewLoading || endingInterview}
                       rows={3}
-                      className="flex-1 text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                      className="flex-1 text-xs p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
                     />
                     <button
                       onClick={handleSubmitAnswer}
                       disabled={interviewLoading || endingInterview || !candidateAnswer.trim()}
-                      className="px-5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow"
+                      className="px-5 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-mono font-bold flex items-center gap-1 shadow-sm"
                     >
                       <Send className="w-3.5 h-3.5" /> Send
                     </button>
@@ -1582,18 +1555,19 @@ export default function CareerCopilotApp() {
           </div>
         )}
 
-        {/* TAB 6: CONVERSATIONAL CAREER ROADMAP ASSISTANT */}
+        {/* TAB 6: ROADMAP PLANNER */}
         {activeTab === "roadmap" && (
           <div className="space-y-6">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Conversational Career Roadmap Assistant</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Chat directly with your career planner. The agent strictly focuses on roadmapping and verifies your weekly study hours before building your feasibility curriculum.
-              </p>
+            <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
+              <span className="tag-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest block">
+                [MODULE // 06: CAREER ROADMAP ASSISTANT]
+              </span>
+              <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white mt-1">
+                Feasibility-Verified Learning Architecture
+              </h2>
             </div>
 
-            {/* Chat Container */}
-            <div className="glass-card flex flex-col h-[650px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+            <div className="arch-card corner-cross flex flex-col h-[650px]">
               {/* Messages Feed */}
               <div className="flex-1 p-6 overflow-y-auto space-y-4">
                 {roadmapMessages.map((msg, i) => (
@@ -1602,46 +1576,45 @@ export default function CareerCopilotApp() {
                     className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}
                   >
                     <div
-                      className={`max-w-2xl p-4 rounded-2xl text-xs leading-relaxed ${
+                      className={`max-w-2xl p-4 rounded-xl text-xs leading-relaxed ${
                         msg.role === "user"
-                          ? "bg-indigo-600 text-white shadow"
-                          : "bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 text-slate-900 dark:text-slate-100"
+                          ? "bg-slate-900 text-white dark:bg-indigo-600 font-mono shadow-sm"
+                          : "bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100"
                       }`}
                     >
                       <p className="whitespace-pre-wrap">{msg.content}</p>
 
-                      {/* Embedded Milestone Timeline if generated */}
                       {msg.roadmap && (
                         <div className="mt-4 space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-                          <div className="flex items-center justify-between text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                          <div className="flex items-center justify-between tag-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
                             <span>{msg.roadmap.target_role} ({msg.roadmap.timeframe})</span>
-                            <span className="px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
-                              Feasibility Verified
+                            <span className="px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900">
+                              FEASIBILITY VERIFIED
                             </span>
                           </div>
 
                           {msg.roadmap.milestones?.map((m: any, idx: number) => (
                             <div
                               key={idx}
-                              className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2 text-slate-900 dark:text-slate-100"
+                              className="p-3.5 rounded-lg bg-white dark:bg-[#0c101a] border border-slate-200 dark:border-slate-800 space-y-2"
                             >
                               <div className="flex items-center justify-between">
-                                <strong className="text-xs text-indigo-600 dark:text-indigo-400">{m.title}</strong>
-                                <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                                <strong className="text-xs text-indigo-600 dark:text-indigo-400 font-mono">{m.title}</strong>
+                                <span className="tag-mono text-[10px] text-slate-500 flex items-center gap-1">
                                   <Clock className="w-3 h-3" /> {m.duration_weeks} wks ({m.allocated_hours} hrs)
                                 </span>
                               </div>
 
                               <div className="flex flex-wrap gap-1">
                                 {m.core_topics?.map((topic: string, j: number) => (
-                                  <span key={j} className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
+                                  <span key={j} className="tag-mono text-[9px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800">
                                     {topic}
                                   </span>
                                 ))}
                               </div>
 
-                              <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-950/80 border border-slate-200 dark:border-slate-800 text-[11px]">
-                                <strong className="text-indigo-600 dark:text-indigo-400">Portfolio Deliverable: </strong>
+                              <div className="p-2.5 rounded bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[11px]">
+                                <strong className="tag-mono text-indigo-600 dark:text-indigo-400 uppercase">Deliverable: </strong>
                                 <span>{m.hands_on_project}</span>
                               </div>
                             </div>
@@ -1652,27 +1625,27 @@ export default function CareerCopilotApp() {
                   </div>
                 ))}
                 {roadmapLoading && (
-                  <div className="flex items-center gap-2 text-xs text-slate-400 p-2">
+                  <div className="flex items-center gap-2 text-xs font-mono text-slate-400 p-2">
                     <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
-                    <span>Roadmap Agent evaluating feasibility & market trends...</span>
+                    <span>SYS // Evaluating feasibility against market trends...</span>
                   </div>
                 )}
                 <div ref={roadmapChatEndRef} />
               </div>
 
-              {/* Chat Input Bar */}
+              {/* Chat Input */}
               <form onSubmit={handleSendRoadmapMessage} className="p-4 border-t border-slate-200 dark:border-slate-800 flex gap-2 bg-slate-50/50 dark:bg-slate-950/50">
                 <input
                   type="text"
                   value={roadmapInput}
                   onChange={(e) => setRoadmapInput(e.target.value)}
                   placeholder="e.g. 'I want to be an AI Engineer in 6 months, studying 12 hours a week'..."
-                  className="flex-1 text-xs px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="flex-1 text-xs px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
                 <button
                   type="submit"
                   disabled={roadmapLoading || !roadmapInput.trim()}
-                  className="px-5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow"
+                  className="px-5 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 shadow-sm"
                 >
                   <Send className="w-3.5 h-3.5" /> Send
                 </button>
@@ -1682,14 +1655,14 @@ export default function CareerCopilotApp() {
         )}
       </main>
 
-      {/* Mini-CRM Job & Application Details Modal */}
+      {/* Mini-CRM Modal */}
       {crmModalOpen && selectedCRMApp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="glass-card max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 space-y-5 bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800">
-            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="arch-card max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 space-y-5 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <div>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white">{selectedCRMApp.title}</h3>
-                <span className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                <span className="tag-mono text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                   <Building className="w-3.5 h-3.5" /> {selectedCRMApp.company} • <MapPin className="w-3.5 h-3.5" /> {selectedCRMApp.location || "Remote"}
                 </span>
               </div>
@@ -1710,18 +1683,18 @@ export default function CareerCopilotApp() {
               </div>
             </div>
 
-            {/* Status Selector */}
+            {/* Stage Selector */}
             <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Pipeline Stage:</span>
-              <div className="flex flex-wrap gap-1">
+              <span className="tag-mono text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">Stage:</span>
+              <div className="flex flex-wrap gap-1 font-mono text-[10px]">
                 {["Saved", "Tailored", "Applied", "Interviewing", "Offered", "Rejected"].map((st) => (
                   <button
                     key={st}
                     onClick={() => handleUpdateCRMStatus(selectedCRMApp.id, st)}
                     disabled={statusUpdateLoading}
-                    className={`px-2.5 py-1 text-[10px] font-bold rounded-md transition-all ${
+                    className={`px-2.5 py-1 font-bold rounded transition-all ${
                       selectedCRMApp.status === st
-                        ? "bg-indigo-600 text-white shadow-sm"
+                        ? "bg-slate-900 text-white dark:bg-indigo-600 shadow-sm"
                         : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-100"
                     }`}
                   >
@@ -1731,12 +1704,12 @@ export default function CareerCopilotApp() {
               </div>
             </div>
 
-            {/* Generated Assets / Exports if Tailored */}
+            {/* Tailored Assets Export */}
             {selectedCRMApp.tailored_cv_data && (
-              <div className="p-4 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/60 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-indigo-600" /> Previously Generated Application Assets
+              <div className="p-4 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/60 space-y-3">
+                <div className="flex items-center justify-between font-mono">
+                  <span className="tag-mono text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-1.5 uppercase">
+                    <Sparkles className="w-4 h-4 text-indigo-600" /> Generated Tailored Assets
                   </span>
                   {selectedCRMApp.ats_score_after && (
                     <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">
@@ -1745,40 +1718,39 @@ export default function CareerCopilotApp() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 font-mono text-xs">
                   <button
                     onClick={() => handleDownloadCVDocx(selectedCRMApp.tailored_cv_data, activeCV?.parsed_profile?.contact_info?.name || "Candidate")}
-                    className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
+                    className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 font-bold rounded border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
                   >
-                    <Download className="w-3.5 h-3.5 text-indigo-600" /> Tailored CV (DOCX)
+                    <Download className="w-3.5 h-3.5 text-indigo-600" /> CV (DOCX)
                   </button>
                   {selectedCRMApp.cover_letter && (
                     <button
                       onClick={() => handleDownloadCoverLetterDocx(selectedCRMApp.cover_letter, selectedCRMApp.company, selectedCRMApp.title)}
-                      className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
+                      className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 font-bold rounded border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
                     >
-                      <Download className="w-3.5 h-3.5 text-indigo-600" /> Cover Letter (DOCX)
+                      <Download className="w-3.5 h-3.5 text-indigo-600" /> Letter (DOCX)
                     </button>
                   )}
                   {selectedCRMApp.cold_email && (
                     <button
                       onClick={() => handleDownloadEmailTxt(selectedCRMApp.cold_email, selectedCRMApp.company)}
-                      className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
+                      className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 font-bold rounded border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-sm"
                     >
-                      <Download className="w-3.5 h-3.5 text-indigo-600" /> Cold Email (TXT)
+                      <Download className="w-3.5 h-3.5 text-indigo-600" /> Email (TXT)
                     </button>
                   )}
                 </div>
               </div>
             )}
 
-            {/* Job Description */}
             <div>
-              <strong className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-1">
+              <strong className="tag-mono text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 block mb-1">
                 Job Description
               </strong>
-              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-200 dark:border-slate-800 max-h-48 overflow-y-auto whitespace-pre-wrap">
-                {selectedCRMApp.description || "No description recorded for this job."}
+              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-200 dark:border-slate-800 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono">
+                {selectedCRMApp.description || "No description recorded."}
               </p>
             </div>
           </div>
@@ -1788,9 +1760,9 @@ export default function CareerCopilotApp() {
       {/* Company Insights Modal */}
       {insightsModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="glass-card max-w-lg w-full p-6 space-y-4 bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+          <div className="arch-card max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="tag-mono text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-white uppercase">
                 <Building className="w-4 h-4 text-indigo-600" />
                 {selectedJob?.company || "Company"} Insights
               </h3>
@@ -1803,16 +1775,16 @@ export default function CareerCopilotApp() {
             </div>
 
             {insightsLoading ? (
-              <div className="py-8 text-center space-y-2">
-                <RefreshCw className="w-6 h-6 mx-auto animate-spin text-indigo-600" />
-                <p className="text-xs text-slate-500">Querying company intelligence...</p>
+              <div className="py-8 text-center space-y-2 font-mono text-xs">
+                <RefreshCw className="w-5 h-5 mx-auto animate-spin text-indigo-600" />
+                <p className="text-slate-500">Querying company intelligence...</p>
               </div>
             ) : companyInsights ? (
-              <div className="space-y-3 text-xs text-slate-700 dark:text-slate-300">
-                <p className="leading-relaxed">{companyInsights.summary}</p>
+              <div className="space-y-3 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+                <p>{companyInsights.summary}</p>
                 {companyInsights.culture_values && (
                   <div>
-                    <strong className="block font-bold text-slate-900 dark:text-slate-100 mb-1">Culture & Values:</strong>
+                    <strong className="tag-mono block font-bold text-slate-900 dark:text-slate-100 mb-1 uppercase">Culture & Values:</strong>
                     <ul className="list-disc pl-4 space-y-1">
                       {companyInsights.culture_values.map((v: string, i: number) => (
                         <li key={i}>{v}</li>
@@ -1822,7 +1794,7 @@ export default function CareerCopilotApp() {
                 )}
               </div>
             ) : (
-              <p className="text-xs text-slate-500">No additional company notes available.</p>
+              <p className="text-xs text-slate-500 font-mono">No additional company notes available.</p>
             )}
           </div>
         </div>
@@ -1831,31 +1803,31 @@ export default function CareerCopilotApp() {
       {/* Settings Modal */}
       {settingsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="glass-card max-w-md w-full p-6 space-y-5 bg-white dark:bg-slate-900 shadow-2xl border border-slate-200 dark:border-slate-800">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-white">
-                <SettingsIcon className="w-4 h-4 text-indigo-600" /> Settings & Preferences
+          <div className="arch-card max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <h3 className="tag-mono text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-white uppercase">
+                <SettingsIcon className="w-4 h-4 text-indigo-600" /> System Settings
               </h3>
               <button onClick={() => setSettingsOpen(false)} className="text-slate-400 hover:text-slate-200 text-sm font-bold">
                 ✕
               </button>
             </div>
 
-            <div className="space-y-4 text-xs">
+            <div className="space-y-4 text-xs font-mono">
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Active User</label>
-                <p className="text-xs text-slate-600 dark:text-slate-400 font-mono">{userEmail}</p>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1 uppercase">Active User</label>
+                <p className="text-slate-600 dark:text-slate-400">{userEmail}</p>
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Theme Mode</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1 uppercase">Theme Mode</label>
                 <div className="flex gap-2">
                   {["light", "dark", "system"].map((t) => (
                     <button
                       key={t}
                       onClick={() => setTheme(t)}
-                      className={`px-3 py-1.5 rounded-lg font-bold capitalize ${
-                        theme === t ? "bg-indigo-600 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                      className={`px-3 py-1.5 rounded font-bold capitalize ${
+                        theme === t ? "bg-slate-900 text-white dark:bg-indigo-600" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
                       }`}
                     >
                       {t}
@@ -1865,12 +1837,12 @@ export default function CareerCopilotApp() {
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Active CV Status</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1 uppercase">Active Resume Status</label>
                 <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
                   <p className="font-bold text-slate-900 dark:text-slate-100">
                     {activeCV?.filename || "No active CV"}
                   </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
+                  <p className="text-[10px] text-slate-500 mt-0.5">
                     Single Active Policy: Uploading a new CV automatically purges previous files.
                   </p>
                 </div>
@@ -1879,13 +1851,13 @@ export default function CareerCopilotApp() {
               <div className="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
                 <button
                   onClick={handleLogout}
-                  className="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg font-bold flex items-center justify-center gap-2"
+                  className="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded font-bold flex items-center justify-center gap-2"
                 >
                   <LogOut className="w-4 h-4" /> Sign Out
                 </button>
                 <button
                   onClick={handleDeleteAccount}
-                  className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold flex items-center justify-center gap-2"
+                  className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white rounded font-bold flex items-center justify-center gap-2"
                 >
                   <Trash2 className="w-4 h-4" /> Delete Account & Purge Data
                 </button>

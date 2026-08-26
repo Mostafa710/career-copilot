@@ -1,73 +1,129 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --border: #e2e8f0;
-  --primary: #4f46e5;
-  --primary-foreground: #ffffff;
-  --secondary: #f8fafc;
-  --secondary-foreground: #334155;
-  --muted: #64748b;
-  --accent: #0284c7;
-  --accent-glow: rgba(79, 70, 229, 0.08);
-}
+@layer base {
+  :root {
+    --font-sans: var(--font-geist-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+    --font-mono: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
 
-.dark {
-  --background: #080c14;
-  --foreground: #f8fafc;
-  --card: #0f172a;
-  --card-foreground: #f8fafc;
-  --border: #1e293b;
-  --primary: #6366f1;
-  --primary-foreground: #ffffff;
-  --secondary: #1e293b;
-  --secondary-foreground: #e2e8f0;
-  --muted: #94a3b8;
-  --accent: #38bdf8;
-  --accent-glow: rgba(99, 102, 241, 0.25);
+    --background: #ffffff;
+    --foreground: #090d16;
+    --card: #ffffff;
+    --card-foreground: #090d16;
+    --border: #e2e8f0;
+    --border-subtle: #f1f5f9;
+    --primary: #4f46e5;
+    --primary-foreground: #ffffff;
+    --muted: #64748b;
+    --accent: #0284c7;
+    --grid-line: rgba(15, 23, 42, 0.04);
+  }
+
+  .dark {
+    --background: #07090e;
+    --foreground: #f8fafc;
+    --card: #0d121d;
+    --card-foreground: #f8fafc;
+    --border: #1e2638;
+    --border-subtle: #131a29;
+    --primary: #6366f1;
+    --primary-foreground: #ffffff;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --grid-line: rgba(255, 255, 255, 0.03);
+  }
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--font-sans);
   min-height: 100vh;
+  letter-spacing: -0.012em;
 }
 
-/* Light mode crisp cards */
-.glass-card {
-  background: var(--card);
+/* Subtle Architectural Grid Background */
+.bg-grid-pattern {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+}
+
+/* RunRobRun Tactical Corner Crosses */
+.corner-cross {
+  position: relative;
+}
+
+.corner-cross::before,
+.corner-cross::after {
+  content: "+";
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 300;
+  line-height: 1;
+  color: #94a3b8;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.dark .corner-cross::before,
+.dark .corner-cross::after {
+  color: #475569;
+}
+
+.corner-cross::before {
+  top: -6px;
+  left: -4px;
+}
+
+.corner-cross::after {
+  bottom: -6px;
+  right: -4px;
+}
+
+/* Tactical Architectural Cards */
+.arch-card {
+  background-color: var(--card);
   border: 1px solid var(--border);
-  border-radius: 1rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 0.75rem;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.glass-card:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.06), 0 4px 6px -4px rgba(0, 0, 0, 0.02);
+.arch-card:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.05);
 }
 
-/* Dark mode glass cards */
-.dark .glass-card {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(16px);
+.dark .arch-card {
+  background-color: #0c101a;
   border-color: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
 }
 
-.dark .glass-card:hover {
+.dark .arch-card:hover {
   border-color: rgba(99, 102, 241, 0.4);
-  box-shadow: 0 12px 30px -5px var(--accent-glow);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.6);
+}
+
+/* Architectural Topbar Nav Pills */
+.nav-pill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 0.15s ease;
+}
+
+/* Monospace Badges & Chips */
+.tag-mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -76,9 +132,9 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #273349;
 }

@@ -85,6 +85,8 @@ export default function CareerCopilotApp() {
 
   // Mock Interview State (Open-Ended)
   const [interviewType, setInterviewType] = useState("Technical");
+  const [interviewDomain, setInterviewDomain] = useState("Artificial Intelligence & Machine Learning");
+  const [selectedInterviewJobId, setSelectedInterviewJobId] = useState<string>("");
   const [interviewSession, setInterviewSession] = useState<any>(null);
   const [interviewTurns, setInterviewTurns] = useState<any[]>([]);
   const [candidateAnswer, setCandidateAnswer] = useState("");
@@ -490,12 +492,17 @@ export default function CareerCopilotApp() {
   const handleStartInterview = async () => {
     setInterviewLoading(true);
     try {
+      const jobId = (interviewType === "Technical" || interviewType === "Behavioral")
+        ? (selectedInterviewJobId || selectedJob?.id || null)
+        : null;
+
       const res = await authFetch("/interview/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           interview_type: interviewType,
-          job_id: selectedJob?.id || null,
+          domain: interviewType === "General" ? interviewDomain : null,
+          job_id: jobId,
           total_turns: 999, // Open-ended
         }),
       });
@@ -503,12 +510,21 @@ export default function CareerCopilotApp() {
         const data = await res.json();
         setInterviewSession(data);
         setInterviewTurns([{ role: "interviewer", content: data.question }]);
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        alert(errData.detail || "Failed to start interview.");
       }
     } catch (err) {
       console.error("Interview start error:", err);
     } finally {
       setInterviewLoading(false);
     }
+  };
+
+  const handleExitInterview = () => {
+    setInterviewSession(null);
+    setInterviewTurns([]);
+    setCandidateAnswer("");
   };
 
   const handleSubmitAnswer = async () => {
@@ -1377,19 +1393,25 @@ export default function CareerCopilotApp() {
             </div>
 
             {!interviewSession ? (
-              <div className="glass-card p-8 max-w-xl mx-auto space-y-5 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                <MessageSquare className="w-12 h-12 mx-auto text-indigo-600" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">Configure Your Mock Interview</h3>
+              <div className="glass-card p-8 max-w-xl mx-auto space-y-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <div className="text-center space-y-2">
+                  <div className="w-12 h-12 mx-auto rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                    <MessageSquare className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">Configure Your Mock Interview</h3>
+                  <p className="text-xs text-slate-500">Choose your interview focus, target domain, or target job opportunity.</p>
+                </div>
                 
+                {/* Mode Selector */}
                 <div className="flex justify-center gap-2">
                   {["General", "Technical", "Behavioral"].map((mode) => (
                     <button
                       key={mode}
                       onClick={() => setInterviewType(mode)}
-                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
                         interviewType === mode
                           ? "bg-indigo-600 text-white shadow"
-                          : "bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400"
+                          : "bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-850"
                       }`}
                     >
                       {mode} Mode
@@ -1397,40 +1419,93 @@ export default function CareerCopilotApp() {
                   ))}
                 </div>
 
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  {interviewType === "Behavioral" && "Evaluates answers strictly against the STAR method (Situation, Task, Action, Result)."}
-                  {interviewType === "Technical" && "Probes system architecture, technical tradeoffs, and engineering decisions."}
-                  {interviewType === "General" && "Covers self-introduction, career motivations, and behavioral communication."}
-                </p>
+                {/* Mode-Specific Configuration Inputs */}
+                {interviewType === "General" && (
+                  <div className="text-left space-y-1.5 pt-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                      Target Interview Domain / Focus Field:
+                    </label>
+                    <input
+                      type="text"
+                      value={interviewDomain}
+                      onChange={(e) => setInterviewDomain(e.target.value)}
+                      placeholder="e.g. Machine Learning, Cloud Architecture, Fullstack Development, DevOps..."
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      The interviewer will evaluate core concepts, career background, and communication skills in this field.
+                    </p>
+                  </div>
+                )}
+
+                {(interviewType === "Technical" || interviewType === "Behavioral") && (
+                  <div className="text-left space-y-1.5 pt-2">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block">
+                      Target Job Opportunity (from your Mini-CRM pipeline or Search):
+                    </label>
+                    <select
+                      value={selectedInterviewJobId}
+                      onChange={(e) => setSelectedInterviewJobId(e.target.value)}
+                      className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">-- Choose a job listing --</option>
+                      {crmApplications.map((app) => (
+                        <option key={app.id} value={app.job_id}>
+                          {app.title} — {app.company} (CRM: {app.status})
+                        </option>
+                      ))}
+                      {jobs.filter((j) => !crmApplications.some((a) => a.job_id === j.id)).map((j) => (
+                        <option key={j.id} value={j.id}>
+                          {j.title} — {j.company} (Job Matcher Result)
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-slate-500">
+                      {interviewType === "Technical"
+                        ? "Probes technical system design, architecture, and coding tradeoffs specifically for this role against your CV."
+                        : "Probes your past CV achievements against this job's culture and role requirements using the STAR method."}
+                    </p>
+                  </div>
+                )}
 
                 <button
                   onClick={handleStartInterview}
                   disabled={interviewLoading}
-                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow"
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg shadow transition-all flex items-center justify-center gap-2"
                 >
-                  {interviewLoading ? "Starting Session..." : "Start Mock Interview"}
+                  {interviewLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />}
+                  Start Mock Interview
                 </button>
               </div>
             ) : (
               <div className="glass-card p-6 space-y-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
                   <span className="text-xs font-bold uppercase text-indigo-600 dark:text-indigo-400">
                     {interviewSession.interview_type} Interview — Turn {interviewSession.current_turn || 1}
                   </span>
-                  {!interviewSession.is_completed ? (
+                  <div className="flex items-center gap-2">
+                    {!interviewSession.is_completed ? (
+                      <button
+                        onClick={handleEndInterview}
+                        disabled={endingInterview}
+                        className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all"
+                      >
+                        {endingInterview ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <StopCircle className="w-3.5 h-3.5" />}
+                        Conclude Interview & View Scorecard
+                      </button>
+                    ) : (
+                      <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-full">
+                        Completed
+                      </span>
+                    )}
                     <button
-                      onClick={handleEndInterview}
-                      disabled={endingInterview}
-                      className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 text-rose-600 dark:text-rose-300 border border-rose-200 dark:border-rose-900 text-xs font-bold rounded-lg flex items-center gap-1.5 transition-all"
+                      onClick={handleExitInterview}
+                      className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 flex items-center gap-1.5 transition-all"
+                      title="Exit session and return to setup"
                     >
-                      {endingInterview ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <StopCircle className="w-3.5 h-3.5" />}
-                      Conclude Interview & View Scorecard
+                      <LogOut className="w-3.5 h-3.5" /> Exit Session
                     </button>
-                  ) : (
-                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950 px-2.5 py-1 rounded-full">
-                      Completed
-                    </span>
-                  )}
+                  </div>
                 </div>
 
                 {/* Turns Chat Box */}
@@ -1456,7 +1531,7 @@ export default function CareerCopilotApp() {
 
                 {/* Scorecard on Completion */}
                 {interviewSession.final_evaluation && (
-                  <div className="p-5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/80 space-y-3">
+                  <div className="p-5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/80 space-y-4">
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2">
                         <Award className="w-4 h-4" /> Final Evaluation Scorecard
@@ -1471,6 +1546,15 @@ export default function CareerCopilotApp() {
                     <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                       {interviewSession.final_evaluation.star_method_assessment || interviewSession.final_evaluation.technical_depth_assessment}
                     </p>
+
+                    <div className="pt-2 border-t border-emerald-200 dark:border-emerald-900/50 flex justify-end">
+                      <button
+                        onClick={handleExitInterview}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow"
+                      >
+                        <ArrowRight className="w-3.5 h-3.5" /> Exit Interview & Start New Session
+                      </button>
+                    </div>
                   </div>
                 )}
 

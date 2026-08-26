@@ -16,6 +16,7 @@ router = APIRouter(prefix="/interview", tags=["Mock Interview Simulator"])
 class StartInterviewRequest(BaseModel):
     interview_type: str = "General"  # 'General', 'Technical', 'Behavioral'
     job_id: Optional[uuid.UUID] = None
+    domain: Optional[str] = None  # For General mode domain specification
     total_turns: Optional[int] = 999  # Open-ended by default
 
 
@@ -36,11 +37,11 @@ async def start_interview_session(
 ):
     """
     Initialize an open-ended mock interview session.
-    Generates the customized opening question based on the selected mode and target JD.
+    Generates customized opening question based on mode, domain, target JD, and candidate CV.
     """
-    job_title = "Software Engineer"
-    company_name = "Innovative Tech Co"
-    job_desc = "Building robust distributed software architectures."
+    job_title = req.domain.strip() if req.domain else "Software Engineer"
+    company_name = "Tech Organization"
+    job_desc = f"Core competencies and problem solving in {job_title}."
 
     if req.job_id:
         job = db.query(Job).filter(Job.id == req.job_id).first()
@@ -59,6 +60,7 @@ async def start_interview_session(
         job_title=job_title,
         company_name=company_name,
         candidate_summary=candidate_summary,
+        domain=req.domain,
     )
 
     # Create new session in DB

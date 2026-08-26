@@ -140,12 +140,12 @@ export default function CareerCopilotApp() {
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: authEmail, password: authPassword }),
+        body: JSON.stringify({ email: authEmail.trim(), password: authPassword }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setAuthError(data.detail || "Authentication failed. Please check credentials.");
+        setAuthError(data.detail || (authMode === "login" ? "Invalid email or password." : "Registration failed. Please try again."));
         return;
       }
 
@@ -156,8 +156,8 @@ export default function CareerCopilotApp() {
 
       fetchActiveCV(data.access_token);
       fetchCRM(data.access_token);
-    } catch (err) {
-      setAuthError("Unable to connect to backend server. Ensure API is running.");
+    } catch (err: any) {
+      setAuthError("Unable to connect to backend server. Please verify the FastAPI server is running on port 8000.");
     } finally {
       setAuthLoading(false);
     }
@@ -482,12 +482,18 @@ export default function CareerCopilotApp() {
   const handleDeleteAccount = async () => {
     if (confirm("Are you sure you want to permanently delete your account and all associated data?")) {
       try {
-        await authFetch("/auth/account", { method: "DELETE" });
-        handleLogout();
-        setSettingsOpen(false);
-        alert("Account and records permanently deleted.");
+        const res = await authFetch("/auth/account", { method: "DELETE" });
+        if (res.ok || res.status === 401) {
+          handleLogout();
+          setSettingsOpen(false);
+          alert("Account and records permanently deleted.");
+        } else {
+          alert("Could not delete account. Please try again.");
+        }
       } catch (err) {
         console.error("Delete error:", err);
+        handleLogout();
+        setSettingsOpen(false);
       }
     }
   };

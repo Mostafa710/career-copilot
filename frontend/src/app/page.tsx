@@ -770,7 +770,7 @@ export default function CareerCopilotApp() {
                 className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white text-xs font-mono font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"
               >
                 {authLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Terminal className="w-4 h-4" />}
-                {authMode === "login" ? "Authenticate ->" : "Create Account ->"}
+                {authMode === "login" ? "Authenticate →" : "Create Account →"}
               </button>
             </form>
           </div>
@@ -939,7 +939,7 @@ export default function CareerCopilotApp() {
                   disabled={cvLoading || !pasteText.trim()}
                   className="w-full py-2 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-mono font-bold rounded-lg shadow-sm transition-all"
                 >
-                  {cvLoading ? "Analyzing..." : "Analyze Pasted Text ->"}
+                  {cvLoading ? "Analyzing..." : "Analyze Pasted Text →"}
                 </button>
               </div>
 
@@ -1064,7 +1064,7 @@ export default function CareerCopilotApp() {
                 className="px-5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 text-white text-xs font-mono font-bold rounded-lg flex items-center justify-center gap-2 shadow-sm"
               >
                 {jobsLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                Execute Search ->
+                Execute Search →
               </button>
             </div>
 
@@ -1122,7 +1122,7 @@ export default function CareerCopilotApp() {
                       onClick={() => handleTailorApplication(job)}
                       className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-mono font-bold rounded-md flex items-center gap-1.5 shadow-sm"
                     >
-                      <Sparkles className="w-3.5 h-3.5" /> Tailor App ->
+                      <Sparkles className="w-3.5 h-3.5" /> Tailor App →
                     </button>
                   </div>
                 </div>
@@ -1167,7 +1167,7 @@ export default function CareerCopilotApp() {
                     onClick={handleSaveToCRM}
                     className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-md shadow-sm"
                   >
-                    Save to CRM ->
+                    Save to CRM →
                   </button>
                 </div>
               )}
@@ -1197,7 +1197,7 @@ export default function CareerCopilotApp() {
                   <div className="text-right font-mono">
                     <span className="text-[10px] text-slate-500 block">ATS MATCH DELTA:</span>
                     <div className="text-sm font-black text-slate-900 dark:text-slate-100">
-                      {tailoredApp.ats_score_before}% -> <span className="text-emerald-600">{tailoredApp.ats_score_after}%</span>
+                      {tailoredApp.ats_score_before}% → <span className="text-emerald-600">{tailoredApp.ats_score_after}%</span>
                     </div>
                   </div>
                 </div>
@@ -1448,7 +1448,7 @@ export default function CareerCopilotApp() {
                   className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-indigo-600 dark:hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-mono font-bold rounded-lg shadow-sm transition-all flex items-center justify-center gap-2"
                 >
                   {interviewLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Terminal className="w-4 h-4" />}
-                  Initialize Interview Session ->
+                  Initialize Interview Session →
                 </button>
               </div>
             ) : (
@@ -1525,7 +1525,7 @@ export default function CareerCopilotApp() {
                         onClick={handleExitInterview}
                         className="px-4 py-2 bg-slate-900 dark:bg-indigo-600 text-white font-mono text-xs font-bold rounded-md flex items-center gap-1.5 shadow"
                       >
-                        <ArrowRight className="w-3.5 h-3.5" /> Exit Session & Return ->
+                        <ArrowRight className="w-3.5 h-3.5" /> Exit Session & Return →
                       </button>
                     </div>
                   </div>

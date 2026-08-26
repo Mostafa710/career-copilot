@@ -945,7 +945,43 @@ export default function CareerCopilotApp() {
 
               {/* Score Display Card */}
               <div className="arch-card corner-cross p-6 space-y-6 lg:col-span-2">
-                {activeCV?.general_ats_score ? (
+                {cvLoading ? (
+                  <div className="py-16 flex flex-col items-center justify-center text-center space-y-5 font-mono">
+                    <div className="relative">
+                      <div className="w-16 h-16 rounded-2xl border border-indigo-500/30 dark:border-indigo-500/20 bg-indigo-50/50 dark:bg-indigo-950/40 flex items-center justify-center shadow-inner">
+                        <RefreshCw className="w-8 h-8 animate-spin text-indigo-600 dark:text-indigo-400" />
+                      </div>
+                      <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-500 animate-ping" />
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="tag-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest block">
+                        [SYS // PARSING & DETERMINISTIC EVALUATION]
+                      </span>
+                      <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                        Analyzing Resume Architecture
+                      </h4>
+                      <p className="text-xs text-slate-400">
+                        Extracting sections and computing 100-point ATS compliance...
+                      </p>
+                    </div>
+
+                    <div className="w-full max-w-md space-y-2.5 text-left text-xs bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
+                      <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300">
+                        <Activity className="w-3.5 h-3.5 text-indigo-600 animate-pulse shrink-0" />
+                        <span>01. Ingesting text stream & OCR fallback check...</span>
+                      </div>
+                      <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300">
+                        <Cpu className="w-3.5 h-3.5 text-indigo-600 animate-pulse shrink-0" />
+                        <span>02. Extracting skills inventory & work experience...</span>
+                      </div>
+                      <div className="flex items-center gap-2.5 text-slate-700 dark:text-slate-300">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 animate-pulse shrink-0" />
+                        <span>03. Computing 100-point deterministic ATS score...</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : activeCV?.general_ats_score ? (
                   <div>
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-4 gap-3">
                       <div>

@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     
     LIGHTNING_API_KEY: Optional[str] = None
     LIGHTNING_BASE_URL: str = "https://lightning.ai/api/v1"
-    LIGHTNING_MODEL: str = "openai/gpt-oss-120b"
+    LIGHTNING_MODEL: str = "lightning-ai/gpt-oss-120b"
 
     # Embedding Model Settings (Free Local HuggingFace default, CPU-optimized for AWS Free Tier)
     EMBEDDING_PROVIDER: str = "huggingface"  # "huggingface" or "openai"

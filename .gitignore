@@ -1,0 +1,36 @@
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+
+# Virtual environments & Python artifacts
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+wheels/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local data & file storage
+storage/
+cv tests/
+*.pdf
+*.docx
+
+# Node / Frontend artifacts
+node_modules/
+.next/
+out/
+
+# OS / IDE artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -159,16 +159,16 @@ async def test_market_research_mena_aggregation(monkeypatch):
 if __name__ == "__main__":
     import asyncio
     test_wuzzuf_html_parsing()
-    print("✓ test_wuzzuf_html_parsing passed")
+    print("[PASS] test_wuzzuf_html_parsing passed")
     test_bayt_html_parsing()
-    print("✓ test_bayt_html_parsing passed")
+    print("[PASS] test_bayt_html_parsing passed")
     test_jsearch_normalization()
-    print("✓ test_jsearch_normalization passed")
+    print("[PASS] test_jsearch_normalization passed")
 
     class DummyMonkey:
         def setattr(self, obj, name, val):
             setattr(obj, name, val)
 
     asyncio.run(test_market_research_mena_aggregation(DummyMonkey()))
-    print("✓ test_market_research_mena_aggregation passed")
+    print("[PASS] test_market_research_mena_aggregation passed")
     print("ALL MENA JOB SEARCH TESTS PASSED!")

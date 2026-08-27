@@ -71,11 +71,11 @@ class MarketResearchAgent:
 
         logger.info(f"Market Research querying MENA sources: query='{search_query}', location='{location}'")
 
-        # 1. Execute concurrent multi-source job fetch (Wuzzuf, Bayt, RapidAPI JSearch)
+        # 1. Execute concurrent multi-source job fetch (RapidAPI JSearch first, then Wuzzuf & Bayt)
         tasks = [
+            jsearch_client.search_jobs(query=search_query, location=location),
             wuzzuf_scraper.search_jobs(query=search_query),
             bayt_scraper.search_jobs(query=search_query, country="egypt"),
-            jsearch_client.search_jobs(query=search_query, location=location),
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -84,7 +84,7 @@ class MarketResearchAgent:
         seen_hashes: Set[str] = set()
         seen_ids: Set[str] = set(existing_external_ids or set())
 
-        # Merge results from scrapers and API
+        # Merge results from scrapers and API in priority order (RapidAPI -> Wuzzuf -> Bayt)
         for res in results:
             if isinstance(res, list):
                 for job in res:
@@ -117,7 +117,7 @@ class MarketResearchAgent:
                 if len(collected_jobs) >= 20:
                     break
 
-        return collected_jobs[:20]
+        return collected_jobs
 
 
 market_research_agent = MarketResearchAgent()

@@ -83,20 +83,23 @@ async def search_jobs(
             job_dict["id"] = str(existing_db_job.id)
             saved_jobs.append(job_dict)
 
-    # 5. Automatically compute Match Scores if active CV exists
+    # 5. Automatically compute Match Scores if active CV exists (takes top 15-20 highest matching across ALL fetched jobs)
     if user.profile and user.profile.parsed_data:
         ranked_jobs = job_matching_agent.match_and_rank_jobs(
             parsed_cv=user.profile.parsed_data,
             jobs=saved_jobs,
             cv_embedding=user.profile.embedding,
         )
+        final_jobs = ranked_jobs[:20]
         return {
             "status": "success",
-            "count": len(ranked_jobs),
-            "jobs": ranked_jobs,
+            "count": len(final_jobs),
+            "jobs": final_jobs,
         }
 
-    return {"status": "success", "count": len(saved_jobs), "jobs": saved_jobs}
+    # If no CV uploaded: return top 15-20 in prioritized source order (RapidAPI -> Wuzzuf -> Bayt -> Tavily)
+    final_unmatched = saved_jobs[:20]
+    return {"status": "success", "count": len(final_unmatched), "jobs": final_unmatched}
 
 
 @router.get("/{job_id}/insights")

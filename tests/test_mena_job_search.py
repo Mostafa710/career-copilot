@@ -138,16 +138,19 @@ async def test_market_research_mena_aggregation(monkeypatch):
     async def mock_jsearch(query, location="Egypt", page=1, num_pages=1):
         return jsearch_client._normalize_jobs(SAMPLE_JSEARCH_DATA)
 
+    from backend.app.services.tavily_client import tavily_client
+
     monkeypatch.setattr(wuzzuf_scraper, "search_jobs", mock_wuzzuf)
     monkeypatch.setattr(bayt_scraper, "search_jobs", mock_bayt)
     monkeypatch.setattr(jsearch_client, "search_jobs", mock_jsearch)
+    monkeypatch.setattr(tavily_client, "is_configured", lambda: False)
 
     jobs = await market_research_agent.search_jobs(
         query="Python Engineer in Cairo",
         user_preferences={"target_role": "Python Engineer", "default_country": "Egypt"},
     )
 
-    # We expect 2 (Wuzzuf) + 1 (Bayt) + 2 (JSearch) = 5 distinct jobs
+    # With Tavily backfill disabled, exactly 2 (Wuzzuf) + 1 (Bayt) + 2 (JSearch) = 5 jobs
     assert len(jobs) == 5
     sources = {j["source"] for j in jobs}
     assert "wuzzuf" in sources

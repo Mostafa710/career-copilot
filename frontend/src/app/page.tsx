@@ -67,14 +67,16 @@ export default function CareerCopilotApp() {
   const [cvLoading, setCvLoading] = useState(false);
   const [pasteText, setPasteText] = useState("");
 
-  // Job Search State
+  // Job Search & Matcher Modal State
   const [searchQuery, setSearchQuery] = useState("Software Engineer");
   const [jobs, setJobs] = useState<any[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState<any>(null);
+  const [selectedMatcherJob, setSelectedMatcherJob] = useState<any>(null);
+  const [jobDetailsModalOpen, setJobDetailsModalOpen] = useState(false);
+  const [insightsExpanded, setInsightsExpanded] = useState(false);
   const [companyInsights, setCompanyInsights] = useState<any>(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
-  const [insightsModalOpen, setInsightsModalOpen] = useState(false);
 
   // Application Tailor State
   const [tailoredApp, setTailoredApp] = useState<any>(null);
@@ -301,15 +303,29 @@ export default function CareerCopilotApp() {
     }
   };
 
-  const handleFetchInsights = async (job: any) => {
+  const handleOpenJobDetails = (job: any, autoExpandInsights = false) => {
+    setSelectedMatcherJob(job);
     setSelectedJob(job);
+    setJobDetailsModalOpen(true);
+    setCompanyInsights(job.company_insights || null);
+    if (autoExpandInsights) {
+      setInsightsExpanded(true);
+      if (!job.company_insights) {
+        fetchInsightsForJob(job);
+      }
+    } else {
+      setInsightsExpanded(false);
+    }
+  };
+
+  const fetchInsightsForJob = async (job: any) => {
     setInsightsLoading(true);
-    setInsightsModalOpen(true);
     try {
       const res = await authFetch(`/jobs/${job.id}/insights`);
       if (res.ok) {
         const data = await res.json();
         setCompanyInsights(data.insights);
+        setJobs((prev) => prev.map((j) => (j.id === job.id ? { ...j, company_insights: data.insights } : j)));
       }
     } catch (err) {
       console.error("Insights error:", err);
@@ -1107,11 +1123,17 @@ export default function CareerCopilotApp() {
             {/* Job Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {jobs.map((job, idx) => (
-                <div key={idx} className="arch-card corner-cross p-5 flex flex-col justify-between space-y-4">
+                <div
+                  key={idx}
+                  className="arch-card corner-cross p-5 flex flex-col justify-between space-y-4 hover:border-slate-400 dark:hover:border-slate-600 transition-all cursor-pointer group"
+                  onClick={() => handleOpenJobDetails(job)}
+                >
                   <div>
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{job.title}</h3>
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                          {job.title}
+                        </h3>
                         <div className="flex items-center gap-1.5 mt-1">
                           <span className="tag-mono text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase font-bold border border-slate-200 dark:border-slate-700">
                             {job.source ? `[${job.source.toUpperCase()}]` : "[MENA // RADAR]"}
@@ -1122,7 +1144,7 @@ export default function CareerCopilotApp() {
                         </div>
                       </div>
                       {job.match_score !== undefined && (
-                        <div className="tag-mono px-2.5 py-1 rounded-md text-xs font-black bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                        <div className="tag-mono px-2.5 py-1 rounded-md text-xs font-black bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0">
                           {job.match_score}% MATCH
                         </div>
                       )}
@@ -1131,6 +1153,9 @@ export default function CareerCopilotApp() {
                     <p className="text-xs text-slate-600 dark:text-slate-300 mt-3 line-clamp-3 leading-relaxed">
                       {job.description}
                     </p>
+                    <span className="tag-mono text-[10px] text-indigo-600 dark:text-indigo-400 font-bold block mt-1.5 group-hover:underline">
+                      Click to view full description & insights →
+                    </span>
 
                     {job.matched_skills && job.matched_skills.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-1">
@@ -1143,7 +1168,10 @@ export default function CareerCopilotApp() {
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800 gap-2">
+                  <div
+                    className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800 gap-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <div className="flex items-center gap-2 font-mono text-xs">
                       <button
                         onClick={() => handleSaveJobToCRM(job)}
@@ -1153,7 +1181,7 @@ export default function CareerCopilotApp() {
                         <BookmarkPlus className="w-3.5 h-3.5 text-indigo-600" /> Save
                       </button>
                       <button
-                        onClick={() => handleFetchInsights(job)}
+                        onClick={() => handleOpenJobDetails(job, true)}
                         className="px-2 py-1 text-slate-500 hover:text-indigo-600 flex items-center gap-1"
                       >
                         <Building className="w-3.5 h-3.5" /> Insights
@@ -1849,45 +1877,176 @@ export default function CareerCopilotApp() {
         </div>
       )}
 
-      {/* Company Insights Modal */}
-      {insightsModalOpen && (
+      {/* Job Details & Expandable Insights Modal (Matcher Tab) */}
+      {jobDetailsModalOpen && selectedMatcherJob && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="arch-card max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
-              <h3 className="tag-mono text-sm font-bold flex items-center gap-2 text-slate-900 dark:text-white uppercase">
-                <Building className="w-4 h-4 text-indigo-600" />
-                {selectedJob?.company || "Company"} Insights
-              </h3>
+          <div className="arch-card max-w-2xl w-full max-h-[88vh] overflow-y-auto p-6 space-y-5 shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 pb-3 gap-3">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">{selectedMatcherJob.title}</h3>
+                  <span className="tag-mono text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase font-bold border border-slate-200 dark:border-slate-700">
+                    {selectedMatcherJob.source ? `[${selectedMatcherJob.source.toUpperCase()}]` : "[RADAR]"}
+                  </span>
+                  {selectedMatcherJob.match_score !== undefined && (
+                    <span className="tag-mono text-[10px] px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800">
+                      {selectedMatcherJob.match_score}% Match
+                    </span>
+                  )}
+                </div>
+                <span className="tag-mono text-xs text-slate-500 flex items-center gap-1 mt-1">
+                  <Building className="w-3.5 h-3.5" /> {selectedMatcherJob.company} • <MapPin className="w-3.5 h-3.5" /> {selectedMatcherJob.location || "Egypt / MENA"}
+                </span>
+              </div>
               <button
-                onClick={() => setInsightsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold"
+                onClick={() => setJobDetailsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold p-1"
               >
                 ✕
               </button>
             </div>
 
-            {insightsLoading ? (
-              <div className="py-8 text-center space-y-2 font-mono text-xs">
-                <RefreshCw className="w-5 h-5 mx-auto animate-spin text-indigo-600" />
-                <p className="text-slate-500">Querying company intelligence...</p>
-              </div>
-            ) : companyInsights ? (
-              <div className="space-y-3 text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-                <p>{companyInsights.summary}</p>
-                {companyInsights.culture_values && (
-                  <div>
-                    <strong className="tag-mono block font-bold text-slate-900 dark:text-slate-100 mb-1 uppercase">Culture & Values:</strong>
-                    <ul className="list-disc pl-4 space-y-1">
-                      {companyInsights.culture_values.map((v: string, i: number) => (
-                        <li key={i}>{v}</li>
-                      ))}
-                    </ul>
-                  </div>
+            {/* Quick Action Toolbar */}
+            <div className="flex flex-wrap items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 gap-2 font-mono text-xs">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleSaveJobToCRM(selectedMatcherJob)}
+                  className="px-3 py-1.5 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 font-bold shadow-sm"
+                >
+                  <BookmarkPlus className="w-3.5 h-3.5 text-indigo-600" /> Save to Mini-CRM
+                </button>
+                {selectedMatcherJob.redirect_url && (
+                  <a
+                    href={selectedMatcherJob.redirect_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 font-bold shadow-sm"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-indigo-600" /> Apply Link ↗
+                  </a>
                 )}
               </div>
-            ) : (
-              <p className="text-xs text-slate-500 font-mono">No additional company notes available.</p>
+              <button
+                onClick={() => {
+                  setJobDetailsModalOpen(false);
+                  handleTailorApplication(selectedMatcherJob);
+                }}
+                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg flex items-center gap-1.5 shadow-sm"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> Tailor Application →
+              </button>
+            </div>
+
+            {/* Skills Tags */}
+            {selectedMatcherJob.extracted_skills && selectedMatcherJob.extracted_skills.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="tag-mono text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 block">
+                  Required / Extracted Skills
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedMatcherJob.extracted_skills.map((skill: string, i: number) => (
+                    <span
+                      key={i}
+                      className="tag-mono text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
+
+            {/* Full Unclipped Job Description */}
+            <div className="space-y-1.5">
+              <span className="tag-mono text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400 block">
+                Full Job Description
+              </span>
+              <div className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-950 p-4 rounded-lg border border-slate-200 dark:border-slate-800 max-h-60 overflow-y-auto whitespace-pre-wrap font-mono">
+                {selectedMatcherJob.description || "No description provided."}
+              </div>
+            </div>
+
+            {/* Company Insights Accordion / Extension */}
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="tag-mono text-xs font-bold uppercase text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <Building className="w-4 h-4 text-indigo-600" />
+                  Company Intelligence & Culture
+                </span>
+                <button
+                  onClick={() => {
+                    if (!insightsExpanded) {
+                      setInsightsExpanded(true);
+                      if (!companyInsights) {
+                        fetchInsightsForJob(selectedMatcherJob);
+                      }
+                    } else {
+                      setInsightsExpanded(false);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                >
+                  <Building className="w-3.5 h-3.5" />
+                  {insightsExpanded ? "Hide Insights ↑" : "Load & View Company Insights ↓"}
+                </button>
+              </div>
+
+              {insightsExpanded && (
+                <div className="p-4 rounded-lg bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/60 space-y-3 transition-all">
+                  {insightsLoading ? (
+                    <div className="py-6 text-center space-y-2 font-mono text-xs">
+                      <RefreshCw className="w-5 h-5 mx-auto animate-spin text-indigo-600" />
+                      <p className="text-slate-500">Querying company intelligence & culture...</p>
+                    </div>
+                  ) : companyInsights ? (
+                    <div className="space-y-3 text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-mono">
+                      <div>
+                        <strong className="tag-mono text-[10px] block font-bold text-slate-900 dark:text-slate-100 mb-1 uppercase">
+                          Company Overview
+                        </strong>
+                        <p className="bg-white/80 dark:bg-slate-900/80 p-3 rounded border border-indigo-100 dark:border-indigo-950">
+                          {companyInsights.summary}
+                        </p>
+                      </div>
+
+                      {companyInsights.culture_values && companyInsights.culture_values.length > 0 && (
+                        <div>
+                          <strong className="tag-mono text-[10px] block font-bold text-slate-900 dark:text-slate-100 mb-1 uppercase">
+                            Culture & Core Values
+                          </strong>
+                          <ul className="list-disc pl-5 space-y-1 bg-white/80 dark:bg-slate-900/80 p-3 rounded border border-indigo-100 dark:border-indigo-950">
+                            {companyInsights.culture_values.map((val: string, idx: number) => (
+                              <li key={idx}>{val}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {companyInsights.tech_stack_highlights && companyInsights.tech_stack_highlights.length > 0 && (
+                        <div>
+                          <strong className="tag-mono text-[10px] block font-bold text-slate-900 dark:text-slate-100 mb-1 uppercase">
+                            Tech Stack Highlights
+                          </strong>
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {companyInsights.tech_stack_highlights.map((tech: string, idx: number) => (
+                              <span
+                                key={idx}
+                                className="tag-mono text-[9px] px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-800 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800"
+                              >
+                                {tech}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 font-mono">No specific company intelligence cached.</p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -19,9 +19,9 @@ flowchart TD
 
     subgraph AgentsLayer ["Agents & Core Engines"]
         Agent_CV["CV Ingestion & Profiler (pdfplumber + pytesseract OCR)"]
-        ATS_Gen["General ATS Readiness Engine (100-pt Deterministic 4-Category Audit)"]
-        Agent_MR["Market Research Agent (Adzuna Dynamic Backfill + Tavily Fallback)"]
-        Agent_JM["Job Matching & Ranking (3-Factor Formula: 50% Skills, 30% Vector, 20% Exp)"]
+        ATS_Gen["Standalone ATS Health Engine (5-Metric Weighted Audit + Rating Tiers)"]
+        Agent_MR["Market Research Agent (RapidAPI JSearch + Wuzzuf + Bayt + Tavily)"]
+        Agent_JM["Job Matching & Ranking (Standard 5-Factor Target Match Engine)"]
         Agent_APP["Application Tailoring Agent (Full CV + Fact Critic Reflection Loop)"]
         Agent_INT["Mock Interview Agent (Stateful Multi-Turn + STAR + Company Insights)"]
         Agent_CR["Career Roadmap Agent (Conversational Chat + Feasibility Critic Loop)"]
@@ -38,7 +38,7 @@ flowchart TD
 
 ---
 
-### Use Case 1: CV Ingestion, Deterministic ATS Audit & Single Active CV Policy
+### Use Case 1: CV Ingestion, Deterministic Standalone ATS Audit & Single Active CV Policy
 
 ```mermaid
 flowchart TD
@@ -58,16 +58,17 @@ flowchart TD
     Sanitize --> StructExt["Pydantic Structured Profile Extractor"]
     StructExt --> Vectorize["Generate Dense Vector Embedding (all-MiniLM-L6-v2, 384 dims)"]
     
-    StructExt --> GenATS["Deterministic 100-Point General ATS Engine"]
+    StructExt --> GenATS["Standard 5-Metric Standalone ATS Health Engine"]
     
-    subgraph GenBreakdown ["100-Point ATS Readiness Breakdown"]
-        GenATS --> C1["Contact & Section Hygiene (25 pts)"]
-        GenATS --> C2["Action Verb Power (25 pts)"]
-        GenATS --> C3["Quantifiable Impact Metrics (25 pts)"]
-        GenATS --> C4["Formatting & Skill Density (25 pts)"]
+    subgraph GenBreakdown ["5-Metric Standalone Health Breakdown"]
+        GenATS --> C1["Parseability & Structure (30%)"]
+        GenATS --> C2["Action Language & NLP Impact (25%)"]
+        GenATS --> C3["Quantification Density (20%)"]
+        GenATS --> C4["Contact & Essential Hygiene (15%)"]
+        GenATS --> C5["Brevity, Length & Formatting (10%)"]
     end
     
-    C1 & C2 & C3 & C4 --> SaveProfile["Upsert into user_profiles Table in PostgreSQL"]
+    C1 & C2 & C3 & C4 & C5 --> SaveProfile["Upsert into user_profiles Table in PostgreSQL"]
     Vectorize --> SaveProfile
     SaveProfile --> ReturnGenReport["Return Profile & ATS Readiness Breakdown to UI"]
 ```
@@ -83,21 +84,21 @@ flowchart TD
     CheckInput -->|Explicit Query| UseExplicit["Extract explicit Role, Location, Skills"]
     CheckInput -->|General Query| Infill["Infill from User Preferences & Active CV Profile"]
     
-    UseExplicit & Infill --> RunConcurrent["Run Concurrent Multi-Source Ingestion Pipeline"]
+    UseExplicit & Infill --> RunConcurrent["Run Prioritized Multi-Source Ingestion Pipeline"]
     
     subgraph MENAPipeline ["Concurrent Egypt & MENA Ingestion Pipeline ($0 Cost)"]
-        RunConcurrent --> Wuzzuf["Wuzzuf Scraper: Direct Egyptian Tech Postings"]
-        RunConcurrent --> Bayt["Bayt Scraper: Egypt & Gulf Postings"]
-        RunConcurrent --> JSearch["RapidAPI JSearch: Live LinkedIn & Indeed Postings"]
+        RunConcurrent --> JSearch["1. RapidAPI JSearch: Live LinkedIn & Indeed Postings"]
+        RunConcurrent --> Wuzzuf["2. Wuzzuf Scraper: Direct Egyptian Tech Postings"]
+        RunConcurrent --> Bayt["3. Bayt Scraper: Egypt & Gulf Postings"]
     end
     
-    Wuzzuf & Bayt & JSearch --> Merge["Merge & Deduplicate: SHA-256 Content Hash + ID Check"]
+    JSearch & Wuzzuf & Bayt --> Merge["Merge & Deduplicate: SHA-256 Content Hash + ID Check"]
     
-    Merge --> CheckCount{"Count >= 7 Jobs?"}
+    Merge --> CheckCount{"Count >= 15 Jobs?"}
     CheckCount -->|Yes| StoreNewJobs["Upsert Delivered Jobs into jobs Table"]
-    CheckCount -->|No (< 7)| TavilyFallback["Tavily Live Web Search (site:linkedin.com OR site:wuzzuf.net)"] --> StoreNewJobs
+    CheckCount -->|No (< 15)| TavilyFallback["4. Tavily Live Web Search (site:linkedin.com OR site:wuzzuf.net)"] --> StoreNewJobs
     
-    StoreNewJobs --> ReturnJobs["Return 7 to 10 Distinct Job Cards with Source Badges to UI"]
+    StoreNewJobs --> ReturnJobs["Return 15 to 20 Distinct Job Cards with Source Badges to UI"]
 ```
 
 ---
@@ -119,21 +120,23 @@ flowchart TD
 
 ---
 
-### Use Case 4: 3-Factor Hybrid Matching & Ranking Engine
+### Use Case 4: Standard 5-Factor JD Target Match Engine
 
 ```mermaid
 flowchart TD
-    ActiveCV["Active Candidate CV Profile"] & JobBatch["Retrieved Job Listings"] --> MatchPipeline["3-Factor Hybrid Matching Engine"]
+    ActiveCV["Active Candidate CV Profile"] & JobBatch["Retrieved Job Listings"] --> MatchPipeline["5-Factor Target Match Engine"]
     
-    subgraph HybridPipeline ["Hybrid 3-Factor Calculations"]
-        MatchPipeline --> F1["Skill Overlap Score (50% Weight): Matched / Required Skills"]
-        MatchPipeline --> F2["Vector Cosine Similarity (30% Weight): CV Vector vs Job Vector"]
-        MatchPipeline --> F3["Experience Alignment Score (20% Weight): Seniority & Years Alignment"]
+    subgraph Standard5Factor ["Standard 5-Factor Target Match Model"]
+        MatchPipeline --> F1["Hard Skills & Keywords (40% Weight): Weighted & Synonym Match"]
+        MatchPipeline --> F2["Semantic NLP & Embeddings (25% Weight): CosSim (70%) + BM25 (30%)"]
+        MatchPipeline --> F3["Title & Seniority Alignment (15% Weight): Role Fit & Seniority"]
+        MatchPipeline --> F4["Experience Duration & Recency (10% Weight): Years Requirement Fit"]
+        MatchPipeline --> F5["Soft Skills & Competencies (10% Weight): Collaboration & Agile"]
     end
     
-    F1 & F2 & F3 --> WeightedRank["Total Match Score = (0.50 * Skills) + (0.30 * Vector) + (0.20 * Exp)"]
-    WeightedRank --> SortDesc["Sort Jobs Descending by Total Score"]
-    SortDesc --> ReturnRanked["Display Ranked Job Cards with Percentage Badges in UI"]
+    F1 & F2 & F3 & F4 & F5 --> WeightedRank["Total Match Score = (0.40 * Hard) + (0.25 * NLP) + (0.15 * Title) + (0.10 * Exp) + (0.10 * Soft)"]
+    WeightedRank --> SortDesc["Sort Jobs Descending by Total Match Score"]
+    SortDesc --> ReturnRanked["Display Top 15-20 Ranked Job Cards with Rating Tier Badges in UI"]
 ```
 
 ---

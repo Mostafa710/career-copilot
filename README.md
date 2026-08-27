@@ -6,25 +6,34 @@ Career Copilot is an end-to-end autonomous multi-agent platform designed to auto
 
 ## 🌟 Core Features & Multi-Agent Capabilities
 
-### 📄 1. CV Analysis & Deterministic ATS Audit
-* **Multi-Format Ingestion:** Native parsing for PDF and DOCX, plus automated OCR fallback via `pytesseract` for scanned or image-only documents ($<50$ extracted characters).
-* **Single Active CV Policy:** Uploading or pasting a new resume automatically purges previous disk files and overwrites database vector embeddings.
-* **Deterministic 100-Point ATS Engine:**
-  1. *Contact & Section Hygiene (25 pts):* Full contact info, standard header verification.
-  2. *Action Verb Strength (25 pts):* Quantifies leading power verbs in bullet points.
-  3. *Quantifiable Impact (25 pts):* Analyzes metrics, currency, percentages, and multipliers.
-  4. *Formatting & Skill Density (25 pts):* Evaluates bullet length, word counts, and technical skill breadth.
-* **Live Architectural Loading Screen:** Real-time feedback with pulsating radar and scanning tickers.
+### 📄 1. Intelligent CV Ingestion & Dual-Mode Standard ATS Scoring Engine
+* **Universal Document Ingestion:** High-fidelity native extraction for PDF (`pdfplumber`) and Word (`python-docx`), with automatic OCR fallback (`pytesseract`) for scanned/image resumes.
+* **Strict Single Active Resume Policy:** Enforces a clean single-file profile per user; uploading or pasting a new CV automatically purges previous disk files, text records, and database profile embeddings.
+* **Feature 1: Standard 5-Metric Standalone Resume Health Score:**
+  $$S_{\text{standalone}} = (0.30 \times S_{\text{parse}}) + (0.25 \times S_{\text{impact}}) + (0.20 \times S_{\text{quant}}) + (0.15 \times S_{\text{hygiene}}) + (0.10 \times S_{\text{brevity}})$$
+  * **Parseability (30%):** Standard section normalization (`Experience`, `Education`, `Skills`, `Projects`), layout scramble check.
+  * **Action Language & NLP Impact (25%):** Tier-1 active verb ratio, passive starter phrase deductions (-5 pts each), cliché buzzword penalties (-3 pts each).
+  * **Quantification Density (20%):** Step scale based on metric-backed bullet ratio ($\ge 40\% \to 100$).
+  * **Contact & Essential Hygiene (15%):** Valid email (+25), phone (+25), location (+25), professional profile links (+25).
+  * **Brevity & Formatting (10%):** Word count evaluation (350-800 optimal) and bullet length boundaries (12-28 words optimal).
+* **Universal Candidate Rating Tiers:** **Excellent (85-100)**, **Good (70-84)**, **Average (55-69)**, **Poor (<55)**.
 
-### 🔎 2. Multi-Source Egypt & MENA Job Discovery Engine
+---
+
+### 🔍 2. Market Research Agent for Egypt & MENA (LinkedIn, Indeed, Wuzzuf, Bayt)
 * **Concurrent Regional Aggregator ($0 Cost):**
+  * **RapidAPI JSearch Client:** Queries live **LinkedIn** and **Indeed** postings (prioritized first).
   * **Wuzzuf Scraper:** High-speed async HTML scraper extracting top Egyptian tech job postings.
   * **Bayt Scraper:** High-speed async HTML scraper extracting Egyptian and Gulf job postings.
-  * **RapidAPI JSearch Client:** Queries live **LinkedIn** and **Indeed** postings (200 free monthly requests).
-* **Universal Live Web Fallback:** Tavily live web search queries `linkedin.com`, `wuzzuf.net`, and `bayt.com` for dynamic backfill, guaranteeing 7–10 distinct jobs per search.
+* **Universal Live Web Fallback:** Tavily live web search queries `linkedin.com`, `wuzzuf.net`, and `bayt.com` for dynamic backfill if total $< 15$, delivering **15–20 distinct ranked jobs** per search.
 * **Cross-Source SHA-256 Deduplication:** Computes normalized `sha256(company|title|location)` across all sources.
-* **3-Factor Hybrid Matching Formula:**
-  $$\text{Total Match Score} = (0.50 \times \text{Skill Overlap}) + (0.30 \times \text{Vector Cosine}) + (0.20 \times \text{Experience Alignment})$$
+* **Feature 2: Standard 5-Factor JD Target Match Engine:**
+  $$S_{\text{match}} = (0.40 \times S_{\text{hard\_skills}}) + (0.25 \times S_{\text{semantic\_nlp}}) + (0.15 \times S_{\text{title\_align}}) + (0.10 \times S_{\text{exp\_years}}) + (0.10 \times S_{\text{soft\_skills}})$$
+  * **Hard Skills & Keywords (40%):** Weighted requirement matching (Must-have = 3.0, Responsibilities = 2.0, Preferred = 1.5), 100% synonym aliasing (e.g. `ReactJS` $\to$ `React`, `K8s` $\to$ `Kubernetes`), 75% parent/child stack credit.
+  * **Semantic NLP (25%):** Dense vector embedding cosine similarity (70%) + BM25 sparse N-gram token overlap (30%).
+  * **Title & Seniority (15%):** Exact (100), Equivalent (90), Lateral (80), Seniority mismatch (50-60).
+  * **Experience Duration & Recency (10%):** Meets/exceeds required years (100), 1-2 yrs below (70), >2 yrs below (40).
+  * **Soft Skills (10%):** Stem-aware coverage for cross-functional collaboration, agile mindset, stakeholder management, and problem-solving.
 
 ### 🏢 3. On-Demand & Auto-Cached Company Intelligence
 * **PostgreSQL Fast Cache:** Retrieves company dossiers in $<5\text{ms}$ with zero external API calls if already queried.

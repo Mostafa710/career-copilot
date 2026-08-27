@@ -98,13 +98,13 @@ class MarketResearchAgent:
 
         logger.info(f"Primary MENA sources returned {len(collected_jobs)} distinct jobs.")
 
-        # 2. Universal Dynamic Backfill via Tavily Live Web Search if fewer than 7 jobs
-        if len(collected_jobs) < 7 and tavily_client.is_configured():
-            logger.info(f"Backfilling {7 - len(collected_jobs)} jobs via Tavily live web search...")
+        # 2. Universal Dynamic Backfill via Tavily Live Web Search if fewer than 15 jobs
+        if len(collected_jobs) < 15 and tavily_client.is_configured():
+            logger.info(f"Backfilling {15 - len(collected_jobs)} jobs via Tavily live web search...")
             tavily_jobs = await tavily_client.search_live_jobs(
                 query=f"{search_query} {location}",
                 location=location,
-                max_results=10 - len(collected_jobs),
+                max_results=20 - len(collected_jobs),
             )
             for tj in tavily_jobs:
                 c_hash = tj.get("content_hash")
@@ -114,10 +114,10 @@ class MarketResearchAgent:
                     seen_ids.add(ext_id)
                     if c_hash:
                         seen_hashes.add(c_hash)
-                if len(collected_jobs) >= 10:
+                if len(collected_jobs) >= 20:
                     break
 
-        return collected_jobs[:10]
+        return collected_jobs[:20]
 
 
 market_research_agent = MarketResearchAgent()

@@ -27,7 +27,7 @@ async def search_jobs(
     db: Session = Depends(get_db),
 ):
     """
-    Search for jobs with dynamic backfill pagination (7–10 distinct jobs).
+    Search for jobs with dynamic backfill pagination (15–20 distinct jobs).
     Excludes previously applied/saved jobs and caches new listings in the database.
     """
     # 1. Fetch user's existing application IDs to filter duplicates

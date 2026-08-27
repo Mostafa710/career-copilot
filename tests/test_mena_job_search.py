@@ -1,4 +1,6 @@
-"""Unit tests for Egypt & MENA Job Search Engine (Wuzzuf, Bayt, JSearch)."""
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pytest
 from backend.app.services.wuzzuf_scraper import wuzzuf_scraper

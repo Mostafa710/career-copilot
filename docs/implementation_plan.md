@@ -6,7 +6,7 @@ Career Copilot is an end-to-end multi-agent AI system built for job discovery, A
 
 ```mermaid
 graph TD
-    Client([Next.js 14+ Frontend App]) <--> API[FastAPI Backend :8000]
+    Client([Next.js Frontend: Vercel Geist + RunRobRun Aesthetic]) <--> API[FastAPI Backend :8000]
     API <--> LLM[LLM Factory: Groq Primary / Lightning.ai Fallback]
     API <--> Embed[HuggingFace all-MiniLM-L6-v2 CPU Embeddings]
     API <--> DB[(PostgreSQL + pgvector)]
@@ -17,18 +17,18 @@ graph TD
 
 ### Core Technologies:
 * **Backend:** Python 3.12, FastAPI, SQLAlchemy 2.0, Pydantic v2, `uv` package manager.
-* **LLM Engine:** Groq primary (`openai/gpt-oss-120b`, `openai/gpt-oss-20b`) with automatic fallback to Lightning.ai (`openai/gpt-oss-120b`).
+* **LLM Engine:** Groq primary (`openai/gpt-oss-120b`, `openai/gpt-oss-20b`) with automatic failover to Lightning.ai (`lightning-ai/gpt-oss-120b`) via LangChain `.with_fallbacks()`.
 * **Embeddings:** Free local HuggingFace `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions, CPU-optimized for AWS Free Tier).
 * **Database & Vector Store:** PostgreSQL 16 with `pgvector` extension.
-* **Search & Intelligence:** Adzuna API (7–10 job dynamic backfill) with Tavily live web search fallback for Egypt and international markets.
-* **Frontend:** Next.js 14+ (App Router), React 19, TypeScript, TailwindCSS, Lucide Icons, `next-themes` (Light/Dark/System modes).
+* **Search & Intelligence:** Adzuna API (7–10 job dynamic backfill) with Tavily live web search fallback for Egypt and international markets, plus auto-caching company insights.
+* **Frontend:** Next.js 16 (App Router), React 19, TypeScript, TailwindCSS, Lucide Icons, Vercel Geist fonts, and `next-themes` (Light/Dark/System modes).
 
 ---
 
 ## 2. Multi-Agent Workflows & Critic Loops
 
 ### Agent 1: CV Ingestion & ATS Readiness Audit
-* **Input:** Multipart file upload (PDF/DOCX) or raw text paste.
+* **Input:** Multipart file upload (PDF/DOCX) or raw text paste with live architectural scanning screen.
 * **Single Active CV Policy:** Overwrites and purges previous files from storage and vector store upon new upload.
 * **OCR Fallback:** `pytesseract` automatically processes scanned pages yielding $<50$ characters.
 * **100-Point Deterministic ATS Engine:**
@@ -44,32 +44,37 @@ graph TD
 * **Cross-Source SHA-256 Deduplication:** Computes normalized `sha256(company|title|location)` to discard duplicate postings across Adzuna and Tavily.
 
 ### Agent 3: Job Matching & Fit Ranking
-* **Hybrid Fit Scoring:** Evaluates active CV against required job skills and JD text.
-* **Re-sorting:** Dynamically orders search batches descending by fit percentage (`88% Match`, `75% Match`).
+* **3-Factor Weighted Formula:**
+  $$\text{Total Match Score} = (0.50 \times \text{Skill Overlap}) + (0.30 \times \text{Vector Cosine}) + (0.20 \times \text{Experience Alignment})$$
+* **Dynamic Re-sorting:** Orders search batches descending by total match percentage (`88% Match`, `75% Match`).
 
 ### Agent 4: Application Tailoring with Fact-Check Critic Loop
-* **Generator Node:** Rephrases, reorders, and highlights candidate achievements matching target JD keywords without inventing facts. Generates targeted cover letters and 3-paragraph cold outreach emails.
-* **Fact & Anti-Hallucination Critic Node:** Validates tailored bullets against original CV. Rejects unverified skills, degrees, or companies (up to 2 retries / 3 total attempts).
+* **Full Resume Integrity:** Generates complete tailored CV preserving contact information, education, and certifications while tailoring professional summary, technical skills, and experience bullets. Generates targeted cover letters and 3-paragraph cold outreach emails.
+* **Company Insights Integration:** Checks PostgreSQL first; auto-fetches via Tavily if absent and caches in DB.
+* **Fact & Anti-Hallucination Critic Node:** Validates tailored bullets against original CV. Rejects unverified skills, degrees, or companies (up to 3 total attempts).
 * **ATS Gap Delta:** Computes Before vs. After ATS match score.
-* **Export:** One-click download as Microsoft Word (`.docx`) and clean HTML/PDF.
+* **Document Exports:** One-click downloads for Word (`.docx`) CV, Word (`.docx`) Cover Letter, Plain Text (`.txt`) Email, and Semantic HTML (`/export/html`).
 
 ### Agent 5: Stateful Mock Interview Simulator
-* **Modes:** *General*, *Technical* (tailored to CV + target JD), and *Behavioral* (STAR Method evaluation).
-* **State Machine:** Multi-turn conversation tracking (Turns 1 to 5) with immediate micro-feedback per candidate answer.
-* **Final Scorecard:** Compiles overall score (0–100), STAR rubric assessment, technical depth, strengths, areas for improvement, and hiring recommendation.
+* **Modes:**
+  * *General:* Custom domain/field specification.
+  * *Technical:* Probes technical depth and system design against selected Mini-CRM opportunities + active CV + company intelligence.
+  * *Behavioral:* Evaluates candidate responses against the STAR framework in the context of target Mini-CRM job + active CV + company culture values.
+* **State Machine:** Multi-turn conversation tracking with immediate per-turn micro-feedback.
+* **Scorecard & Session Management:** Overall score (0–100), STAR rubric assessment, technical depth, strengths, areas for improvement, hiring recommendations, zero-turn conclusion handling, and prominent Exit Interview button.
 
 ### Agent 6: Career Roadmap Planner with Feasibility Critic
-* **Input Gate:** Validates that Target Role, Timeframe, AND Weekly Study Hours are provided. Missing hours halts execution and prompts user.
+* **Input Gate:** Validates that Target Role, Timeframe, AND Weekly Study Hours are provided.
 * **Real-time Market Trends:** Queries Tavily for in-demand technologies, frameworks, and certifications.
 * **Workload Budgeting:** Allocates topics realistically based on total study hours ($Weeks \times Hours/Week$).
-* **Feasibility Critic Node:** Verifies milestone sequencing and ensures workload volume is realistic for the hours budget (up to 2 retries / 3 attempts).
+* **Feasibility Critic Node:** Verifies milestone sequencing and ensures workload volume is realistic for the hours budget (up to 3 attempts).
 
 ---
 
 ## 3. Database Schema Overview
 
 ```sql
--- 6 Core Tables
+-- 6 Core Relational Models with pgvector
 users (id, email, hashed_password, preferences, created_at, updated_at)
 user_profiles (id, user_id, raw_storage_key, raw_text, parsed_data, general_ats_score, embedding vector(384))
 jobs (id, external_id, content_hash, source, title, company, location, salary_min, salary_max, description, company_insights, embedding vector(384))

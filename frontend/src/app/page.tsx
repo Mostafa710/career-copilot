@@ -1078,7 +1078,7 @@ export default function CareerCopilotApp() {
                 [MODULE // 02: MARKET RESEARCH & HYBRID MATCHING]
               </span>
               <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white mt-1">
-                Adzuna & Tavily Deduplicated Market Radar
+                LinkedIn, Indeed, Wuzzuf & Bayt Market Radar
               </h2>
             </div>
 
@@ -1090,7 +1090,7 @@ export default function CareerCopilotApp() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Target Role or Skills (e.g. AI Engineer, Python Alexandria, React Remote)..."
+                  placeholder="Target Role or Skills (e.g. AI Engineer, Python Cairo, React Remote)..."
                   className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
@@ -1112,9 +1112,14 @@ export default function CareerCopilotApp() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{job.title}</h3>
-                        <span className="tag-mono text-[10px] text-slate-500 flex items-center gap-1 mt-1">
-                          <Building className="w-3 h-3" /> {job.company} • <MapPin className="w-3 h-3" /> {job.location || "Remote"}
-                        </span>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="tag-mono text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase font-bold border border-slate-200 dark:border-slate-700">
+                            {job.source ? `[${job.source.toUpperCase()}]` : "[MENA // RADAR]"}
+                          </span>
+                          <span className="tag-mono text-[10px] text-slate-500 flex items-center gap-1">
+                            <Building className="w-3 h-3" /> {job.company} • <MapPin className="w-3 h-3" /> {job.location || "Egypt / MENA"}
+                          </span>
+                        </div>
                       </div>
                       {job.match_score !== undefined && (
                         <div className="tag-mono px-2.5 py-1 rounded-md text-xs font-black bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">

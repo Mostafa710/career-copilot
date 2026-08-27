@@ -74,7 +74,7 @@ flowchart TD
 
 ---
 
-### Use Case 2: Market Research Agent with Dynamic Backfill & Universal Fallback
+### Use Case 2: Market Research Agent for Egypt & MENA (LinkedIn, Indeed, Wuzzuf, Bayt)
 
 ```mermaid
 flowchart TD
@@ -83,25 +83,21 @@ flowchart TD
     CheckInput -->|Explicit Query| UseExplicit["Extract explicit Role, Location, Skills"]
     CheckInput -->|General Query| Infill["Infill from User Preferences & Active CV Profile"]
     
-    UseExplicit & Infill --> InitState["Initialize: page = 1, collected_jobs = empty"]
+    UseExplicit & Infill --> RunConcurrent["Run Concurrent Multi-Source Ingestion Pipeline"]
     
-    subgraph BackfillLoop ["Dynamic Backfill Pagination Loop"]
-        InitState --> CallAdzuna["Query Adzuna API (results_per_page = 10, page = page)"]
-        CallAdzuna --> CheckAdzuna{"Adzuna returned jobs?"}
-        
-        CheckAdzuna -->|Yes| FilterDup["SHA-256 Deduplication vs User Applied/Saved Records"]
-        CheckAdzuna -->|No: Regional Gap e.g. Egypt| TavilyFallback["Tavily Live Web Search (LinkedIn, Wuzzuf, Bayt)"] --> FilterDup
-        
-        FilterDup --> Accumulate["Add unique jobs to collected_jobs"]
-        Accumulate --> CheckCount{"Count in range 7 to 10?"}
-        
-        CheckCount -->|Target Reached: 7 to 10| FinalSlice["Slice top 10 distinct jobs"]
-        CheckCount -->|Below 7 and attempts under 3| IncrementPage["page += 1"] --> CallAdzuna
-        CheckCount -->|Pool Exhausted: Under 7 Available| FinalSlice
+    subgraph MENAPipeline ["Concurrent Egypt & MENA Ingestion Pipeline ($0 Cost)"]
+        RunConcurrent --> Wuzzuf["Wuzzuf Scraper: Direct Egyptian Tech Postings"]
+        RunConcurrent --> Bayt["Bayt Scraper: Egypt & Gulf Postings"]
+        RunConcurrent --> JSearch["RapidAPI JSearch: Live LinkedIn & Indeed Postings"]
     end
     
-    FinalSlice --> StoreNewJobs["Upsert Delivered Jobs into jobs Table"]
-    StoreNewJobs --> ReturnJobs["Return 7 to 10 Distinct Job Cards to UI"]
+    Wuzzuf & Bayt & JSearch --> Merge["Merge & Deduplicate: SHA-256 Content Hash + ID Check"]
+    
+    Merge --> CheckCount{"Count >= 7 Jobs?"}
+    CheckCount -->|Yes| StoreNewJobs["Upsert Delivered Jobs into jobs Table"]
+    CheckCount -->|No (< 7)| TavilyFallback["Tavily Live Web Search (site:linkedin.com OR site:wuzzuf.net)"] --> StoreNewJobs
+    
+    StoreNewJobs --> ReturnJobs["Return 7 to 10 Distinct Job Cards with Source Badges to UI"]
 ```
 
 ---

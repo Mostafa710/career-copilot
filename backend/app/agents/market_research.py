@@ -1,11 +1,14 @@
-"""Market Research Agent: Searches for job postings with dynamic backfill pagination and deduplication."""
+"""Market Research Agent: Multi-source Egypt & MENA job discovery (LinkedIn, Indeed, Wuzzuf, Bayt)."""
 
+import asyncio
 import logging
 from typing import List, Dict, Any, Optional, Set
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 from backend.app.core.llm_factory import get_llm
-from backend.app.services.adzuna_client import adzuna_client
+from backend.app.services.wuzzuf_scraper import wuzzuf_scraper
+from backend.app.services.bayt_scraper import bayt_scraper
+from backend.app.services.jsearch_client import jsearch_client
 from backend.app.services.tavily_client import tavily_client
 
 logger = logging.getLogger(__name__)
@@ -13,14 +16,14 @@ logger = logging.getLogger(__name__)
 
 class SearchIntent(BaseModel):
     role_keywords: str = Field(..., description="Target job title or skill keywords (e.g. 'Backend Engineer', 'Python FastAPI')")
-    location: Optional[str] = Field(None, description="Location or City (e.g. 'London', 'Remote')")
+    location: Optional[str] = Field("Egypt", description="Location, City or Region (e.g. 'Cairo', 'Egypt', 'MENA', 'Remote')")
     is_remote: bool = Field(False, description="True if remote work is preferred")
 
 
 INTENT_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are a smart job search query analyzer.
-Extract the target role keywords, location, and remote preference from the user's natural language request.
-If the user's query is general (e.g., 'find jobs for me', 'show openings'), infill with the candidate's target role and preferences.
+    ("system", """You are an expert job search intent analyzer specializing in the Egypt and MENA technical market.
+Extract the target role keywords, location (default to 'Egypt' if unspecified), and remote preference from the user's query.
+If the query is general (e.g., 'find jobs for me', 'show openings'), infill with the candidate's target role and preferences.
 """),
     ("human", """User Query: {query}
 Candidate Default Role: {default_role}
@@ -30,6 +33,8 @@ Candidate Default Country: {default_country}
 
 
 class MarketResearchAgent:
+    """Orchestrates concurrent multi-source job searches for Egypt & MENA."""
+
     def __init__(self):
         self.llm = get_llm(temperature=0.0)
 
@@ -41,60 +46,78 @@ class MarketResearchAgent:
         existing_external_ids: Optional[Set[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Extracts search intent and runs the dynamic backfill loop to return 7–10 distinct jobs.
+        Extracts search intent and aggregates listings concurrently from Wuzzuf, Bayt,
+        RapidAPI JSearch (LinkedIn & Indeed), with Tavily live search backfill.
+        Guarantees 7–10 distinct jobs.
         """
         prefs = user_preferences or {}
         default_role = prefs.get("target_role") or (candidate_skills[0] if candidate_skills else "Software Engineer")
-        default_country = prefs.get("default_country", "gb")
+        default_country = prefs.get("default_country", "Egypt")
 
         try:
             structured_llm = self.llm.with_structured_output(SearchIntent)
             chain = INTENT_PROMPT | structured_llm
             intent: SearchIntent = await chain.ainvoke({
-                "query": query or "Find jobs for me",
+                "query": query or "Find jobs for me in Egypt",
                 "default_role": default_role,
                 "default_country": default_country,
             })
             search_query = intent.role_keywords
-            location = intent.location or ("Remote" if intent.is_remote else None)
+            location = intent.location or ("Remote" if intent.is_remote else "Egypt")
         except Exception as e:
             logger.warning(f"Query intent parsing fallback: {e}")
             search_query = query if query and len(query) > 3 else default_role
-            location = None
+            location = "Egypt"
 
-        logger.info(f"Market Research querying Adzuna: query='{search_query}', location='{location}'")
+        logger.info(f"Market Research querying MENA sources: query='{search_query}', location='{location}'")
 
-        # 1. Execute Adzuna Search
-        jobs = await adzuna_client.search_with_dynamic_backfill(
-            query=search_query,
-            country=default_country,
-            location=location,
-            existing_external_ids=existing_external_ids or set(),
-            min_target=7,
-            max_target=10,
-            max_attempts=3,
-        )
+        # 1. Execute concurrent multi-source job fetch (Wuzzuf, Bayt, RapidAPI JSearch)
+        tasks = [
+            wuzzuf_scraper.search_jobs(query=search_query),
+            bayt_scraper.search_jobs(query=search_query, country="egypt"),
+            jsearch_client.search_jobs(query=search_query, location=location),
+        ]
 
-        # 2. Universal Global / Egypt Fallback: If Adzuna returned fewer than 7 jobs or location is non-Adzuna
-        if len(jobs) < 7 and tavily_client.is_configured():
-            logger.info(f"Augmenting job search with Tavily live web jobs for query='{search_query}', location='{location}'")
-            seen_hashes = {j.get("content_hash") for j in jobs if j.get("content_hash")}
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        collected_jobs: List[Dict[str, Any]] = []
+        seen_hashes: Set[str] = set()
+        seen_ids: Set[str] = set(existing_external_ids or set())
+
+        # Merge results from scrapers and API
+        for res in results:
+            if isinstance(res, list):
+                for job in res:
+                    c_hash = job.get("content_hash")
+                    ext_id = job.get("external_id")
+                    if ext_id and ext_id not in seen_ids and c_hash not in seen_hashes:
+                        collected_jobs.append(job)
+                        seen_ids.add(ext_id)
+                        if c_hash:
+                            seen_hashes.add(c_hash)
+
+        logger.info(f"Primary MENA sources returned {len(collected_jobs)} distinct jobs.")
+
+        # 2. Universal Dynamic Backfill via Tavily Live Web Search if fewer than 7 jobs
+        if len(collected_jobs) < 7 and tavily_client.is_configured():
+            logger.info(f"Backfilling {7 - len(collected_jobs)} jobs via Tavily live web search...")
             tavily_jobs = await tavily_client.search_live_jobs(
-                query=search_query,
-                location=location or "Egypt",
-                max_results=10 - len(jobs),
+                query=f"{search_query} {location}",
+                location=location,
+                max_results=10 - len(collected_jobs),
             )
             for tj in tavily_jobs:
-                if (
-                    tj["external_id"] not in (existing_external_ids or set())
-                    and tj.get("content_hash") not in seen_hashes
-                ):
-                    jobs.append(tj)
-                    seen_hashes.add(tj.get("content_hash"))
-                if len(jobs) >= 10:
+                c_hash = tj.get("content_hash")
+                ext_id = tj.get("external_id")
+                if ext_id not in seen_ids and c_hash not in seen_hashes:
+                    collected_jobs.append(tj)
+                    seen_ids.add(ext_id)
+                    if c_hash:
+                        seen_hashes.add(c_hash)
+                if len(collected_jobs) >= 10:
                     break
 
-        return jobs
+        return collected_jobs[:10]
 
 
 market_research_agent = MarketResearchAgent()

@@ -1,6 +1,6 @@
 # 🚀 Career Copilot — Multi-Agent AI Career Strategy & Job Search Engine
 
-Career Copilot is an end-to-end autonomous multi-agent platform designed to automate the technical career lifecycle. It features deterministic ATS scoring, real-time market intelligence with dynamic backfill pagination, anti-hallucination resume tailoring with automated critic validation, stateful mock interviews with STAR rubric grading, and feasibility-budgeted career learning roadmaps.
+Career Copilot is an end-to-end autonomous multi-agent platform designed to automate the technical career lifecycle in Egypt, MENA, and international markets. It features deterministic ATS scoring, real-time market intelligence with multi-source MENA job discovery (LinkedIn, Indeed, Wuzzuf, and Bayt), anti-hallucination resume tailoring with automated critic validation, stateful mock interviews with STAR rubric grading, and feasibility-budgeted career learning roadmaps.
 
 ---
 
@@ -16,15 +16,18 @@ Career Copilot is an end-to-end autonomous multi-agent platform designed to auto
   4. *Formatting & Skill Density (25 pts):* Evaluates bullet length, word counts, and technical skill breadth.
 * **Live Architectural Loading Screen:** Real-time feedback with pulsating radar and scanning tickers.
 
-### 🔎 2. Dual-Layer Market Research & 3-Factor Job Matcher
-* **Adzuna Dynamic Backfill Pagination:** Guarantees 7–10 distinct job listings per query via automated page offset pagination.
-* **Universal Location Fallback (Egypt & Global):** If Adzuna lacks coverage in specific markets, Tavily live web search queries LinkedIn, Wuzzuf, Bayt, and Glassdoor.
-* **Cross-Source SHA-256 Deduplication:** Computes normalized `sha256(company|title|location)` to discard duplicate postings across search providers.
-* **Exact 3-Factor Hybrid Matching Formula:**
+### 🔎 2. Multi-Source Egypt & MENA Job Discovery Engine
+* **Concurrent Regional Aggregator ($0 Cost):**
+  * **Wuzzuf Scraper:** High-speed async HTML scraper extracting top Egyptian tech job postings.
+  * **Bayt Scraper:** High-speed async HTML scraper extracting Egyptian and Gulf job postings.
+  * **RapidAPI JSearch Client:** Queries live **LinkedIn** and **Indeed** postings (200 free monthly requests).
+* **Universal Live Web Fallback:** Tavily live web search queries `linkedin.com`, `wuzzuf.net`, and `bayt.com` for dynamic backfill, guaranteeing 7–10 distinct jobs per search.
+* **Cross-Source SHA-256 Deduplication:** Computes normalized `sha256(company|title|location)` across all sources.
+* **3-Factor Hybrid Matching Formula:**
   $$\text{Total Match Score} = (0.50 \times \text{Skill Overlap}) + (0.30 \times \text{Vector Cosine}) + (0.20 \times \text{Experience Alignment})$$
 
 ### 🏢 3. On-Demand & Auto-Cached Company Intelligence
-* **PostgreSQL Fast Cache:** Retrieves company dossiers in $<5\text{ms}$ with zero Tavily calls if already queried.
+* **PostgreSQL Fast Cache:** Retrieves company dossiers in $<5\text{ms}$ with zero external API calls if already queried.
 * **Auto-Fetch on Demand:** If not pre-cached, the system automatically fetches company summary, culture values, and tech stack from Tavily and stores it in the database for instant reuse across all agents.
 
 ### ✍️ 4. Application Studio (Fact-Checked Full CV Tailoring & Document Exports)
@@ -63,7 +66,7 @@ graph TD
     API <--> LLM[LLM Factory: Groq Primary / Lightning.ai Fallback]
     API <--> Embed[HuggingFace all-MiniLM-L6-v2 CPU Embeddings]
     API <--> DB[(PostgreSQL + pgvector)]
-    API <--> Search[Adzuna Dynamic Backfill + Tavily Live Search]
+    API <--> Search[LinkedIn + Indeed + Wuzzuf + Bayt + Tavily]
     API <--> ATS[Deterministic 100-Point ATS Engine]
 ```
 
@@ -94,7 +97,7 @@ cp .env.example .env
 Configure API keys in `.env`:
 * `GROQ_API_KEY`: Groq API Key ([https://console.groq.com/](https://console.groq.com/))
 * `LIGHTNING_API_KEY`: Lightning.ai API Key (Optional fallback)
-* `ADZUNA_APP_ID` & `ADZUNA_API_KEY`: Adzuna Developer Credentials ([https://developer.adzuna.com/](https://developer.adzuna.com/))
+* `RAPIDAPI_KEY`: RapidAPI Key for JSearch LinkedIn/Indeed ([https://rapidapi.com/](https://rapidapi.com/)) (Optional free tier)
 * `TAVILY_API_KEY`: Tavily Search API Key ([https://tavily.com/](https://tavily.com/))
 * `SECRET_KEY`: Cryptographically secure string for JWT authentication.
 
@@ -140,8 +143,10 @@ Run the full backend test suite:
 ```powershell
 uv run pytest
 ```
-* `test_job_content_hash_consistency`: **PASSED**
-* `test_dynamic_backfill_pagination_mock`: **PASSED**
+* `test_wuzzuf_html_parsing`: **PASSED**
+* `test_bayt_html_parsing`: **PASSED**
+* `test_jsearch_normalization`: **PASSED**
+* `test_market_research_mena_aggregation`: **PASSED**
 * `test_general_ats_score_high_quality_cv`: **PASSED**
 * `test_general_ats_score_missing_contact_and_weak_verbs`: **PASSED**
 * `test_job_specific_ats_match`: **PASSED**

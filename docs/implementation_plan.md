@@ -20,7 +20,7 @@ graph TD
 * **LLM Engine:** Groq primary (`openai/gpt-oss-120b`, `openai/gpt-oss-20b`) with automatic failover to Lightning.ai (`lightning-ai/gpt-oss-120b`) via LangChain `.with_fallbacks()`.
 * **Embeddings:** Free local HuggingFace `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions, CPU-optimized for AWS Free Tier).
 * **Database & Vector Store:** PostgreSQL 16 with `pgvector` extension.
-* **Search & Intelligence:** Adzuna API (7–10 job dynamic backfill) with Tavily live web search fallback for Egypt and international markets, plus auto-caching company insights.
+* **Search & Intelligence:** Multi-source Egypt & MENA engine (RapidAPI JSearch for LinkedIn/Indeed, Wuzzuf & Bayt scrapers, and Tavily live search fallback) with auto-cached company intelligence.
 * **Frontend:** Next.js 16 (App Router), React 19, TypeScript, TailwindCSS, Lucide Icons, Vercel Geist fonts, and `next-themes` (Light/Dark/System modes).
 
 ---
@@ -37,11 +37,13 @@ graph TD
   3. *Quantifiable Impact (25 pts):* Measures percentages, currency, multipliers, and scale numbers.
   4. *Formatting & Skill Density (25 pts):* Evaluates word count, bullet density, and technical skill breadth.
 
-### Agent 2: Market Research & Dual-Layer Job Search
-* **Query Infilling:** Inactive/blank queries are auto-infilled from candidate target role and preferences.
-* **Dynamic Backfill Loop:** Guarantees 7–10 distinct jobs per query by requesting consecutive page offsets if initial filtering yields $<7$ jobs.
-* **Universal Location Fallback (Egypt & Global):** If Adzuna lacks dedicated local indexes (e.g. Egypt, MENA), Tavily live web search queries LinkedIn, Wuzzuf, Bayt, and Glassdoor to deliver 7–10 active job listings.
-* **Cross-Source SHA-256 Deduplication:** Computes normalized `sha256(company|title|location)` to discard duplicate postings across Adzuna and Tavily.
+### Agent 2: Multi-Source Egypt & MENA Job Discovery Engine
+* **Concurrent Ingestion ($0 Cost):**
+  * *Wuzzuf Scraper:* Direct HTML extraction of Egyptian technical roles.
+  * *Bayt Scraper:* Direct HTML extraction of Egypt & Gulf opportunities.
+  * *RapidAPI JSearch Client:* Queries live **LinkedIn** and **Indeed** listings (200 free monthly requests).
+* **Universal Dynamic Backfill:** Tavily live web search queries `linkedin.com`, `wuzzuf.net`, and `bayt.com` if fewer than 7 jobs are collected, guaranteeing 7–10 distinct opportunities.
+* **Cross-Source SHA-256 Deduplication:** Normalizes `sha256(company|title|location)` to discard duplicate postings across scrapers and APIs.
 
 ### Agent 3: Job Matching & Fit Ranking
 * **3-Factor Weighted Formula:**

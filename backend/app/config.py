@@ -32,11 +32,9 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
 
-    # Job & Web Search APIs
-    ADZUNA_APP_ID: Optional[str] = None
-    ADZUNA_API_KEY: Optional[str] = None
-    ADZUNA_DEFAULT_COUNTRY: str = "gb"
-
+    # Job & Web Search APIs (RapidAPI JSearch for LinkedIn/Indeed, Wuzzuf & Bayt Scrapers, Tavily Fallback)
+    RAPIDAPI_KEY: Optional[str] = None
+    RAPIDAPI_JSEARCH_HOST: str = "jsearch.p.rapidapi.com"
     TAVILY_API_KEY: Optional[str] = None
 
     # LangSmith Observability

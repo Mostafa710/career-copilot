@@ -1,4 +1,4 @@
-"""Mock Interview Agent: Stateful multi-turn simulation with STAR rubric and dynamic evaluation."""
+"""Mock Interview Agent: Stateful multi-turn simulation with STAR rubric, dynamic evaluation, and company intelligence."""
 
 import logging
 from typing import Dict, Any, List, Optional
@@ -32,18 +32,19 @@ TURN_PROMPT = ChatPromptTemplate.from_messages([
 INTERVIEW CONTEXT:
 Job Title / Domain: {job_title}
 Company / Organization: {company_name}
+Company Culture & Intelligence: {company_insights}
 Candidate Profile & Experience: {candidate_summary}
 Target Job Requirements / Focus: {job_description}
 
 INTERVIEW TYPE SPECIFICS:
 - General Mode: Probe domain knowledge, career aspirations, and communication skills in {job_title}.
-- Technical Mode: Probe architectural decisions, coding patterns, system design, and technical tradeoffs for {job_title} based on the candidate's CV and target JD.
-- Behavioral Mode: Rigorously evaluate behavioral responses against the STAR framework (Situation, Task, Action, Result) in the context of {company_name} and {job_title}.
+- Technical Mode: Probe architectural decisions, coding patterns, system design, and technical tradeoffs for {job_title} based on the candidate's CV, target JD, and company tech culture.
+- Behavioral Mode: Rigorously evaluate behavioral responses against the STAR framework (Situation, Task, Action, Result) in the context of {company_name}'s culture and {job_title}.
 
 GUIDELINES:
 1. Provide concise, constructive micro-feedback on the candidate's last answer.
 2. Ask ONE clear, focused question for Turn {turn_number} of {total_turns}.
-3. Anchor questions in the candidate's actual CV experience when relevant.
+3. Anchor questions in the candidate's actual CV experience and company values when relevant.
 """),
     ("human", """Conversation History:
 {conversation_history}
@@ -77,10 +78,17 @@ class MockInterviewAgent:
         company_name: str,
         candidate_summary: str,
         domain: Optional[str] = None,
+        company_insights: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Generate a personalized opening interview question."""
+        culture_note = ""
+        if company_insights:
+            culture_vals = company_insights.get("culture_values", [])
+            if culture_vals:
+                culture_note = f" (focusing on our values of {', '.join(culture_vals[:2])})"
+
         if interview_type.lower() == "behavioral":
-            return f"Welcome! We're conducting a behavioral interview for the {job_title} role at {company_name}. To begin, could you tell me about a high-stakes project from your past experience where you had to overcome a major unexpected obstacle, and walk me through your actions and the outcome?"
+            return f"Welcome! We're conducting a behavioral interview for the {job_title} role at {company_name}{culture_note}. To begin, could you tell me about a high-stakes project from your past experience where you had to overcome a major unexpected obstacle, and walk me through your actions and the outcome?"
         elif interview_type.lower() == "technical":
             return f"Hello! We're excited to dive into your technical background for the {job_title} position at {company_name}. Could you walk me through the architecture of a complex system or technical project you built, explaining the core technologies you selected and the key engineering tradeoffs you made?"
         else:
@@ -98,9 +106,16 @@ class MockInterviewAgent:
         user_response: str,
         current_turn: int,
         total_turns: int = 999,
+        company_insights: Optional[Dict[str, Any]] = None,
     ) -> InterviewTurnResponse:
         """Evaluate the candidate's answer and generate the next question."""
         formatted_history = "\n".join([f"{msg['role'].upper()}: {msg['content']}" for msg in conversation_history[-6:]])
+
+        insights_str = "No specific company dossier."
+        if company_insights:
+            summary = company_insights.get("summary", "")
+            values = ", ".join(company_insights.get("culture_values", []))
+            insights_str = f"Summary: {summary} | Values: {values}"
 
         structured_llm = self.llm.with_structured_output(InterviewTurnResponse)
         chain = TURN_PROMPT | structured_llm
@@ -109,6 +124,7 @@ class MockInterviewAgent:
             "interview_type": interview_type,
             "job_title": job_title,
             "company_name": company_name,
+            "company_insights": insights_str,
             "candidate_summary": candidate_summary,
             "job_description": job_description[:800],
             "conversation_history": formatted_history or "No previous turns.",

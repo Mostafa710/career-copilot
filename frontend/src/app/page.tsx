@@ -1454,27 +1454,35 @@ export default function CareerCopilotApp() {
                 )}
 
                 {(interviewType === "Technical" || interviewType === "Behavioral") && (
-                  <div className="text-left space-y-1">
+                  <div className="text-left space-y-1.5">
                     <label className="tag-mono text-[10px] font-bold uppercase text-slate-700 dark:text-slate-300 block">
-                      Target Job Opportunity (from CRM Pipeline):
+                      Target Job Opportunity (from Mini-CRM Pipeline):
                     </label>
-                    <select
-                      value={selectedInterviewJobId}
-                      onChange={(e) => setSelectedInterviewJobId(e.target.value)}
-                      className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    >
-                      <option value="">-- Select Opportunity --</option>
-                      {crmApplications.map((app) => (
-                        <option key={app.id} value={app.job_id}>
-                          {app.title} — {app.company} ({app.status})
-                        </option>
-                      ))}
-                      {jobs.filter((j) => !crmApplications.some((a) => a.job_id === j.id)).map((j) => (
-                        <option key={j.id} value={j.id}>
-                          {j.title} — {j.company} (Search Result)
-                        </option>
-                      ))}
-                    </select>
+                    {crmApplications.length > 0 ? (
+                      <select
+                        value={selectedInterviewJobId}
+                        onChange={(e) => setSelectedInterviewJobId(e.target.value)}
+                        className="w-full text-xs p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      >
+                        <option value="">-- Select Mini-CRM Opportunity ({crmApplications.length} Available) --</option>
+                        {crmApplications.map((app) => (
+                          <option key={app.id} value={app.job_id}>
+                            {app.title} — {app.company} [{app.status}]
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="p-3 rounded-lg bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-mono flex items-center justify-between">
+                        <span>No jobs saved in Mini-CRM yet.</span>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("jobs")}
+                          className="font-bold underline hover:text-amber-900 dark:hover:text-amber-100"
+                        >
+                          Find & Save Jobs →
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 

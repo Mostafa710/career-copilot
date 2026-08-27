@@ -85,10 +85,24 @@ async def tailor_application_for_job(
         "extracted_skills": job.extracted_skills or [],
     }
 
+    # Retrieve cached company insights or auto-fetch from Tavily if not yet cached
+    company_insights = job.company_insights
+    if not company_insights and job.company:
+        try:
+            from backend.app.services.tavily_client import tavily_client
+            company_insights = await tavily_client.get_company_insights(
+                company_name=job.company,
+                job_title=job.title,
+            )
+            job.company_insights = company_insights
+            db.commit()
+        except Exception:
+            company_insights = None
+
     result = await application_tailor_agent.tailor_application(
         parsed_cv=user.profile.parsed_data,
         job=job_dict,
-        company_insights=job.company_insights,
+        company_insights=company_insights,
         max_attempts=3,
     )
 

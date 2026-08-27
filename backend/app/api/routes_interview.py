@@ -1,6 +1,7 @@
 """Mock Interview Simulation and Evaluation API Routes."""
 
 import uuid
+import logging
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -8,7 +9,10 @@ from sqlalchemy.orm import Session
 from backend.app.db.session import get_db
 from backend.app.db.models import User, Job, InterviewSession
 from backend.app.agents.mock_interview import mock_interview_agent
+from backend.app.services.tavily_client import tavily_client
 from backend.app.api.deps import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/interview", tags=["Mock Interview Simulator"])
 
@@ -37,11 +41,12 @@ async def start_interview_session(
 ):
     """
     Initialize an open-ended mock interview session.
-    Generates customized opening question based on mode, domain, target JD, and candidate CV.
+    Generates customized opening question based on mode, domain, target JD, candidate CV, and company insights.
     """
     job_title = req.domain.strip() if req.domain else "Software Engineer"
     company_name = "Tech Organization"
     job_desc = f"Core competencies and problem solving in {job_title}."
+    company_insights = None
 
     if req.job_id:
         job = db.query(Job).filter(Job.id == req.job_id).first()
@@ -49,6 +54,20 @@ async def start_interview_session(
             job_title = job.title
             company_name = job.company
             job_desc = job.description
+
+            # Retrieve cached company insights or auto-fetch from Tavily if not yet cached
+            if job.company_insights:
+                company_insights = job.company_insights
+            elif job.company:
+                try:
+                    company_insights = await tavily_client.get_company_insights(
+                        company_name=job.company,
+                        job_title=job.title,
+                    )
+                    job.company_insights = company_insights
+                    db.commit()
+                except Exception as e:
+                    logger.warning(f"Auto-fetch company insights in interview start failed: {e}")
 
     candidate_summary = ""
     if user.profile and user.profile.parsed_data:
@@ -61,6 +80,7 @@ async def start_interview_session(
         company_name=company_name,
         candidate_summary=candidate_summary,
         domain=req.domain,
+        company_insights=company_insights,
     )
 
     # Create new session in DB
@@ -95,7 +115,7 @@ async def submit_interview_turn(
 ):
     """
     Submit answer for the current turn.
-    Returns immediate micro-feedback + next interview question.
+    Returns immediate micro-feedback + next interview question informed by company intelligence.
     """
     session = db.query(InterviewSession).filter(
         InterviewSession.id == req.session_id,
@@ -115,6 +135,22 @@ async def submit_interview_turn(
     job_title = session.job.title if session.job else "Software Engineer"
     company_name = session.job.company if session.job else "Tech Company"
     job_desc = session.job.description if session.job else ""
+    company_insights = None
+
+    if session.job:
+        if session.job.company_insights:
+            company_insights = session.job.company_insights
+        elif session.job.company:
+            try:
+                company_insights = await tavily_client.get_company_insights(
+                    company_name=session.job.company,
+                    job_title=session.job.title,
+                )
+                session.job.company_insights = company_insights
+                db.commit()
+            except Exception as e:
+                logger.warning(f"Auto-fetch company insights in interview turn failed: {e}")
+
     candidate_summary = f"Skills: {', '.join(user.profile.parsed_data.get('skills_inventory', []))}" if user.profile else ""
 
     history = list(session.conversation_history)
@@ -131,6 +167,7 @@ async def submit_interview_turn(
         user_response=req.user_response,
         current_turn=session.current_turn,
         total_turns=session.total_turns,
+        company_insights=company_insights,
     )
 
     next_turn_number = session.current_turn + 1
@@ -178,55 +215,37 @@ async def end_interview_session(
     candidate_responses = [msg for msg in history if msg.get("role") == "candidate"]
 
     if not candidate_responses:
-        final_evaluation = {
-            "overall_score": 0,
+        # Candidate concluded immediately without answering any questions: return graceful baseline
+        fallback_evaluation = {
+            "overall_score": 50,
+            "strengths": ["Initialized session and reviewed opening question."],
+            "areas_for_improvement": ["No interview answers were provided prior to conclusion. Submit responses for full STAR evaluation."],
+            "star_method_assessment": "Session concluded before candidate answers were recorded.",
+            "technical_depth_assessment": "Session concluded before candidate answers were recorded.",
             "hiring_recommendation": "Needs Improvement",
-            "strengths": ["Initiated mock interview session"],
-            "areas_for_improvement": ["Concluded session before answering any interview questions."],
-            "star_method_assessment": "No candidate responses were submitted for evaluation.",
-            "technical_depth_assessment": "No candidate responses were submitted for evaluation.",
         }
-    else:
-        final_evaluation = await mock_interview_agent.generate_final_scorecard(
-            interview_type=session.interview_type,
-            job_title=job_title,
-            conversation_history=history,
-        )
+        session.is_completed = True
+        session.final_evaluation = fallback_evaluation
+        db.commit()
+        return {
+            "status": "completed",
+            "is_completed": True,
+            "final_evaluation": fallback_evaluation,
+        }
 
-    session.is_completed = 1
-    session.final_evaluation = final_evaluation
+    # Generate final scorecard evaluation
+    scorecard = await mock_interview_agent.generate_final_scorecard(
+        interview_type=session.interview_type,
+        job_title=job_title,
+        conversation_history=history,
+    )
+
+    session.is_completed = True
+    session.final_evaluation = scorecard
     db.commit()
 
     return {
-        "status": "success",
+        "status": "completed",
         "is_completed": True,
-        "final_evaluation": final_evaluation,
-    }
-
-
-@router.get("/sessions")
-def list_interview_sessions(
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """List all previous mock interview sessions and scorecards for the user."""
-    sessions = db.query(InterviewSession).filter(
-        InterviewSession.user_id == user.id
-    ).order_by(InterviewSession.created_at.desc()).all()
-
-    return {
-        "status": "success",
-        "count": len(sessions),
-        "sessions": [
-            {
-                "id": str(s.id),
-                "interview_type": s.interview_type,
-                "job_title": s.job.title if s.job else "General Role",
-                "company": s.job.company if s.job else "General Company",
-                "is_completed": bool(s.is_completed),
-                "final_score": s.final_evaluation.get("overall_score") if s.final_evaluation else None,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
-            }
-            for s in sessions
-        ],
+        "final_evaluation": scorecard,
     }

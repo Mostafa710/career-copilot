@@ -1014,25 +1014,37 @@ export default function CareerCopilotApp() {
                             {activeCV.general_ats_score.overall_score}
                             <span className="text-sm font-normal text-slate-400">/100</span>
                           </div>
-                          <span className="tag-mono text-[9px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
-                            Deterministic Score
+                          <span className={`tag-mono text-[10px] font-bold px-2 py-0.5 rounded uppercase border inline-block mt-0.5 ${
+                            activeCV.general_ats_score.rating_tier === "Excellent"
+                              ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800"
+                              : activeCV.general_ats_score.rating_tier === "Good"
+                              ? "bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800"
+                              : activeCV.general_ats_score.rating_tier === "Average"
+                              ? "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800"
+                              : "bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800"
+                          }`}>
+                            Tier: {activeCV.general_ats_score.rating_tier || "Standard"}
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    {/* 4 Categories */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-5">
+                    {/* 5 Standardized Standalone Sub-Metrics */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 my-5">
                       {[
-                        { label: "Contact & Sections", val: activeCV.general_ats_score.category_scores.contact_and_sections, max: 25 },
-                        { label: "Action Verbs", val: activeCV.general_ats_score.category_scores.action_verbs, max: 25 },
-                        { label: "Quantifiable Impact", val: activeCV.general_ats_score.category_scores.quantifiable_impact, max: 25 },
-                        { label: "Formatting & Skills", val: activeCV.general_ats_score.category_scores.formatting_and_skills, max: 25 },
+                        { label: "Parseability", weight: "30%", val: activeCV.general_ats_score.category_scores?.parseability ?? 100 },
+                        { label: "Action Impact", weight: "25%", val: activeCV.general_ats_score.category_scores?.action_impact ?? 85 },
+                        { label: "Quantification", weight: "20%", val: activeCV.general_ats_score.category_scores?.quantification ?? 70 },
+                        { label: "Contact Hygiene", weight: "15%", val: activeCV.general_ats_score.category_scores?.contact_hygiene ?? 100 },
+                        { label: "Brevity & Format", weight: "10%", val: activeCV.general_ats_score.category_scores?.brevity_formatting ?? 90 },
                       ].map((cat, i) => (
-                        <div key={i} className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800">
-                          <span className="tag-mono text-[10px] text-slate-500 uppercase block">{cat.label}</span>
-                          <span className="text-xl font-black font-mono text-slate-900 dark:text-slate-100">
-                            {cat.val}<span className="text-xs text-slate-400 font-normal">/{cat.max}</span>
+                        <div key={i} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+                          <div>
+                            <span className="tag-mono text-[9px] text-slate-500 uppercase block font-bold">{cat.label}</span>
+                            <span className="tag-mono text-[8px] text-indigo-500 block">Weight: {cat.weight}</span>
+                          </div>
+                          <span className="text-lg font-black font-mono text-slate-900 dark:text-slate-100 mt-2">
+                            {cat.val}<span className="text-xs text-slate-400 font-normal">/100</span>
                           </span>
                         </div>
                       ))}
@@ -1906,6 +1918,34 @@ export default function CareerCopilotApp() {
                 ✕
               </button>
             </div>
+
+            {/* 5-Factor Match Breakdown */}
+            {selectedMatcherJob.sub_scores && (
+              <div className="p-3.5 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="tag-mono text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">
+                    5-Factor Target Match Model
+                  </span>
+                  <span className="tag-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                    Tier: {selectedMatcherJob.rating_tier || "Standard"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {[
+                    { label: "Hard Skills", weight: "40%", val: selectedMatcherJob.sub_scores.hard_skills },
+                    { label: "Semantic NLP", weight: "25%", val: selectedMatcherJob.sub_scores.semantic_nlp },
+                    { label: "Title Fit", weight: "15%", val: selectedMatcherJob.sub_scores.title_alignment },
+                    { label: "Exp Years", weight: "10%", val: selectedMatcherJob.sub_scores.experience_years },
+                    { label: "Soft Skills", weight: "10%", val: selectedMatcherJob.sub_scores.soft_skills },
+                  ].map((sub, idx) => (
+                    <div key={idx} className="p-2 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
+                      <span className="tag-mono text-[8px] text-slate-500 uppercase block">{sub.label} ({sub.weight})</span>
+                      <span className="text-xs font-bold font-mono text-slate-900 dark:text-slate-100">{sub.val}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Quick Action Toolbar */}
             <div className="flex flex-wrap items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 gap-2 font-mono text-xs">

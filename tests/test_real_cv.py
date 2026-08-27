@@ -64,9 +64,9 @@ async def test_full_ats_audit_on_real_cv():
 
     print("\n--- 100-POINT GENERAL ATS SCORECARD ---")
     print(f"Overall ATS Score: {ats.get('overall_score')}/100")
-    print("Category Breakdown:")
+    print("Category Breakdown (5 Standard Sub-Metrics):")
     for cat, score in ats.get("category_scores", {}).items():
-        print(f"  - {cat}: {score}/25")
+        print(f"  - {cat}: {score}/100")
 
     print("\nActionable Feedback Checklist:")
     for item in ats.get("feedback_checklist", []):

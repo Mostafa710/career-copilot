@@ -140,17 +140,20 @@ class ApplicationTailorAgent:
                 logger.warning(f"Fact Critic REJECTED on attempt {attempt}: {evaluation.feedback}")
                 critic_feedback = f"Fix hallucinations: {', '.join(evaluation.hallucinations_found)}. {evaluation.feedback}"
 
-        # Calculate Before vs After ATS Match Score
+        # Calculate Before vs After ATS Match Score using Standard 5-Factor Model
         required_skills = job.get("extracted_skills", [])
         original_match = compute_job_specific_ats_match(
             cv_skills=candidate_skills,
             job_required_skills=required_skills,
             cv_bullets=parsed_cv.get("experience_bullets", []),
             job_description=job_desc,
+            cv_experience=candidate_exp,
+            target_job_title=job_title,
         )
 
         tailored_bullets = []
-        for exp in (last_generated.tailored_experience if last_generated else candidate_exp):
+        tailored_exp = last_generated.tailored_experience if last_generated else candidate_exp
+        for exp in tailored_exp:
             tailored_bullets.extend(exp.get("bullets", []))
 
         tailored_match = compute_job_specific_ats_match(
@@ -158,6 +161,8 @@ class ApplicationTailorAgent:
             job_required_skills=required_skills,
             cv_bullets=tailored_bullets,
             job_description=job_desc,
+            cv_experience=tailored_exp,
+            target_job_title=job_title,
         )
 
         # Full Tailored CV Object
@@ -165,7 +170,7 @@ class ApplicationTailorAgent:
             "contact_info": candidate_contact,
             "professional_summary": last_generated.tailored_professional_summary if last_generated else f"Targeted candidate for {job_title} at {company_name}.",
             "skills": last_generated.highlighted_skills if last_generated and last_generated.highlighted_skills else candidate_skills,
-            "experience": last_generated.tailored_experience if last_generated else candidate_exp,
+            "experience": tailored_exp,
             "education": candidate_edu,
             "certifications": candidate_certs,
         }
@@ -176,6 +181,8 @@ class ApplicationTailorAgent:
             "cold_email": last_generated.cold_email if last_generated else "",
             "ats_score_before": original_match["match_score"],
             "ats_score_after": max(tailored_match["match_score"], original_match["match_score"]),
+            "match_details_before": original_match,
+            "match_details_after": tailored_match,
             "critic_attempts": attempt,
             "critic_passed": evaluation.passed if 'evaluation' in locals() else True,
         }

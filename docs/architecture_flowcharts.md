@@ -1,6 +1,6 @@
 # Career Copilot: Architecture & Agent Flowcharts
 
-Standalone reference document containing the global architecture and complete workflow flowcharts for all agents and use cases in **Career Copilot**.
+Comprehensive reference document containing the global architecture and end-to-end workflow flowcharts for all agents, security modules, and user flows in **Career Copilot**.
 
 ---
 
@@ -8,37 +8,72 @@ Standalone reference document containing the global architecture and complete wo
 
 ```mermaid
 flowchart TD
-    User["User / Browser"] <-->|HTTP / Port 3000| NextFrontend["Next.js 16 Frontend (Geist Typography + RunRobRun Architectural System)"]
+    User["User / Browser"] <-->|HTTP / Port 3000| NextFrontend["Next.js 16 Frontend (Widescreen Bento Grid + Emerald & Slate Palette + Geist Typography)"]
     NextFrontend <-->|REST API / Port 8000| FastApiServer["FastAPI Backend Server (:8000)"]
     
     SharedDB["PostgreSQL 16 + pgvector (Database & Semantic Embeddings)"]
-    LocalStorage["Local Storage / S3 Adapter (Active CV & Documents)"]
+    LocalStorage["Local Storage / File System Adapter (Active CV & DOCX Exports)"]
 
     FastApiServer <--> SharedDB
     FastApiServer <--> LocalStorage
 
-    subgraph AgentsLayer ["Agents & Core Engines"]
-        Agent_CV["CV Ingestion & Profiler (pdfplumber + pytesseract OCR)"]
-        ATS_Gen["Standalone ATS Health Engine (5-Metric Weighted Audit + Rating Tiers)"]
-        Agent_MR["Market Research Agent (RapidAPI JSearch + Wuzzuf + Bayt + Tavily)"]
-        Agent_JM["Job Matching & Ranking (Standard 5-Factor Target Match Engine)"]
-        Agent_APP["Application Tailoring Agent (Full CV + Fact Critic Reflection Loop)"]
-        Agent_INT["Mock Interview Agent (Stateful Multi-Turn + STAR + Company Insights)"]
-        Agent_CR["Career Roadmap Agent (Conversational Chat + Feasibility Critic Loop)"]
-        Tool_Tavily["Tavily Tool (Auto-Cached Company Insights & Market Trends)"]
+    subgraph SecurityLayer ["Authentication & Verification"]
+        Auth_OTP["6-Digit Email OTP Verification Engine (10-Min Expiry)"]
+        Auth_JWT["Stateless JWT Token Access & Role Permissions"]
     end
 
-    FastApiServer --> Agent_CV & ATS_Gen & Agent_MR & Agent_JM & Agent_APP & Agent_INT & Agent_CR
+    subgraph AgentsLayer ["Autonomous Agents & Core Engines"]
+        Agent_CV["01: CV Diagnostics & Ingestion Engine (pdfplumber + pytesseract OCR)"]
+        ATS_Gen["01: 100-Point Deterministic ATS Engine (5 Weighted Sub-Metrics + Tier Badges)"]
+        Agent_MR["02: Market Research Agent (RapidAPI JSearch + Wuzzuf + Bayt + Tavily SERP)"]
+        Agent_JM["02: Job Matching & Fit Engine (Standardized 5-Factor JD Match Model)"]
+        Agent_APP["03: Multi-Agent Application Studio (Dual-Pass Fact Critic Loop + DOCX Generator)"]
+        Agent_CRM["04: 6-Stage Mini-CRM Kanban Pipeline (Saved → Offered/Rejected)"]
+        Agent_INT["05: Stateful Mock Interview Simulator (General, Technical, Behavioral + STAR)"]
+        Agent_CR["06: Career Strategy & Roadmap Coach (Conversational + Feasibility Critic)"]
+        Tool_Tavily["Tavily Tool (Auto-Cached Company Dossiers & Real-Time Market Trends)"]
+    end
+
+    FastApiServer --> SecurityLayer
+    FastApiServer --> AgentsLayer
     Agent_APP & Agent_INT & Agent_CR <--> Tool_Tavily
 ```
 
 ---
 
-## 2. Agent Use-Case Flowcharts
+## 2. Authentication & Email Verification Lifecycle
+
+```mermaid
+flowchart TD
+    Start["User Submits Signup Form (Name, Email, Strong Password)"] --> CheckUser{"User already registered?"}
+    
+    CheckUser -->|Yes| PromptLogin["Return Error: Email already registered"]
+    CheckUser -->|No| HashPass["Hash Password using bcrypt"]
+    
+    HashPass --> GenOTP["Generate Secure 6-Digit Verification OTP"]
+    GenOTP --> SetExpiry["Set Expiry Window (Now + 10 Minutes)"]
+    SetExpiry --> SaveDB["Create User record in PostgreSQL (is_verified = False)"]
+    SaveDB --> SendMail["Dispatch HTML Verification Email to User Inbox"]
+    
+    SendMail --> Modal["Frontend opens 6-Digit OTP Verification Modal"]
+    
+    Modal --> UserTypesCode["User Enters 6-Digit OTP"]
+    UserTypesCode --> VerifyCode{"Check: OTP matches AND not expired?"}
+    
+    VerifyCode -->|Invalid / Expired| ShowError["Display Error + 'Resend Code' Button"]
+    VerifyCode -->|Valid| SetVerified["Update User: is_verified = True, verification_code = NULL"]
+    
+    SetVerified --> IssueJWT["Generate Signed JWT Access Token"]
+    IssueJWT --> OpenDashboard["Unlock Full Widescreen System Dashboard"]
+```
 
 ---
 
-### Use Case 1: CV Ingestion, Deterministic Standalone ATS Audit & Single Active CV Policy
+## 3. Agent Use-Case Flowcharts
+
+---
+
+### Module 01: CV Diagnostics, Deterministic ATS Scoring & Single Active CV Policy
 
 ```mermaid
 flowchart TD
@@ -61,8 +96,8 @@ flowchart TD
     StructExt --> GenATS["Standard 5-Metric Standalone ATS Health Engine"]
     
     subgraph GenBreakdown ["5-Metric Standalone Health Breakdown"]
-        GenATS --> C1["Parseability & Structure (30%)"]
-        GenATS --> C2["Action Language & NLP Impact (25%)"]
+        GenATS --> C1["Parseability & Structural Integrity (30%)"]
+        GenATS --> C2["Action Language & Power Verbs (25%)"]
         GenATS --> C3["Quantification Density (20%)"]
         GenATS --> C4["Contact & Essential Hygiene (15%)"]
         GenATS --> C5["Brevity, Length & Formatting (10%)"]
@@ -75,83 +110,58 @@ flowchart TD
 
 ---
 
-### Use Case 2: Market Research Agent for Egypt & MENA (LinkedIn, Indeed, Wuzzuf, Bayt)
+### Module 02: Market Research & 5-Factor Hybrid Job Matching Engine
 
 ```mermaid
 flowchart TD
-    UserQuery["User Search Query"] --> CheckInput{"Did user specify explicit criteria?"}
+    UserQuery["User Search Query / Target Role"] --> CheckInput{"Explicit query or profile default?"}
     
     CheckInput -->|Explicit Query| UseExplicit["Extract explicit Role, Location, Skills"]
-    CheckInput -->|General Query| Infill["Infill from User Preferences & Active CV Profile"]
+    CheckInput -->|Default / Blank| Infill["Infill from User Preferences & Active CV Profile"]
     
-    UseExplicit & Infill --> RunConcurrent["Run Prioritized Multi-Source Ingestion Pipeline"]
+    UseExplicit & Infill --> RunConcurrent["Run Prioritized Multi-Source Discovery Pipeline"]
     
-    subgraph MENAPipeline ["Concurrent Egypt & MENA Ingestion Pipeline ($0 Cost)"]
+    subgraph MENAPipeline ["Concurrent Multi-Source Ingestion Pipeline"]
         RunConcurrent --> JSearch["1. RapidAPI JSearch: Live LinkedIn & Indeed Postings"]
         RunConcurrent --> Wuzzuf["2. Wuzzuf Scraper: Direct Egyptian Tech Postings"]
         RunConcurrent --> Bayt["3. Bayt Scraper: Egypt & Gulf Postings"]
     end
     
-    JSearch & Wuzzuf & Bayt --> Merge["Merge & Deduplicate: SHA-256 Content Hash + ID Check"]
+    JSearch & Wuzzuf & Bayt --> Merge["Merge & Deduplicate: SHA-256 Content Hash + Unique External ID"]
     
-    Merge --> CheckCount{"Count >= 15 Jobs?"}
-    CheckCount -->|Yes| StoreNewJobs["Upsert Delivered Jobs into jobs Table"]
-    CheckCount -->|"No (< 15)"| TavilyFallback["4. Tavily Live Web Search (site:linkedin.com OR site:wuzzuf.net)"] --> StoreNewJobs
+    Merge --> QualGate{"Anti-Aggregator Quality Gate (job_quality.py)"}
+    QualGate -->|Reject Directory/Dead Links| Discard["Discard Non-Posting Results"]
+    QualGate -->|Verified Individual Vacancy| CheckCount{"Count >= 15 Jobs?"}
     
-    StoreNewJobs --> ReturnJobs["Return 15 to 20 Distinct Job Cards with Source Badges to UI"]
-```
-
----
-
-### Use Case 3: On-Demand & Auto-Cached Company Intelligence
-
-```mermaid
-flowchart TD
-    Trigger["Agent or User Requests Company Insights"] --> CheckDBCache{"PostgreSQL company_insights IS NOT NULL?"}
-    
-    CheckDBCache -->|Yes: Cached| ReturnFromDB["Return Cached Dossier in <5ms (0 Tavily Calls)"]
-    CheckDBCache -->|No: Not Yet Cached| FetchTavily["Call Tavily API Search Tool"]
-    
-    FetchTavily --> SaveDB["Update jobs Table: set company_insights = payload"]
-    SaveDB --> ReturnFromDB
-    
-    ReturnFromDB --> Inject["Inject into Tailor / Interview Agent or Render Modal"]
-```
-
----
-
-### Use Case 4: Standard 5-Factor JD Target Match Engine
-
-```mermaid
-flowchart TD
-    ActiveCV["Active Candidate CV Profile"] & JobBatch["Retrieved Job Listings"] --> MatchPipeline["5-Factor Target Match Engine"]
+    CheckCount -->|Yes| MatchPipeline["5-Factor Target Match Engine"]
+    CheckCount -->|"No (< 15)"| TavilyFallback["4. Tavily Live Search (site:linkedin.com/jobs OR site:wuzzuf.net)"] --> MatchPipeline
     
     subgraph Standard5Factor ["Standard 5-Factor Target Match Model"]
-        MatchPipeline --> F1["Hard Skills & Keywords (40% Weight): Weighted & Synonym Match"]
-        MatchPipeline --> F2["Semantic NLP & Embeddings (25% Weight): CosSim (70%) + BM25 (30%)"]
-        MatchPipeline --> F3["Title & Seniority Alignment (15% Weight): Role Fit & Seniority"]
-        MatchPipeline --> F4["Experience Duration & Recency (10% Weight): Years Requirement Fit"]
-        MatchPipeline --> F5["Soft Skills & Competencies (10% Weight): Collaboration & Agile"]
+        MatchPipeline --> F1["Hard Skills & Keywords (40%): Canonical Tech Synonym Overlap"]
+        MatchPipeline --> F2["Semantic NLP & Embeddings (25%): Cosine Sim (70%) + Sparse BM25 (30%)"]
+        MatchPipeline --> F3["Title & Seniority Alignment (15%): Role & Level Fit"]
+        MatchPipeline --> F4["Experience Duration & Recency (10%): Required Years Fit"]
+        MatchPipeline --> F5["Soft Skills & Competencies (10%): Collaboration & Agile"]
     end
     
-    F1 & F2 & F3 & F4 & F5 --> WeightedRank["Total Match Score = (0.40 * Hard) + (0.25 * NLP) + (0.15 * Title) + (0.10 * Exp) + (0.10 * Soft)"]
-    WeightedRank --> SortDesc["Sort Jobs Descending by Total Match Score"]
-    SortDesc --> ReturnRanked["Display Top 15-20 Ranked Job Cards with Rating Tier Badges in UI"]
+    F1 & F2 & F3 & F4 & F5 --> WeightedRank["Compute Weighted Match Score & Assign Rating Tier"]
+    WeightedRank --> SortDesc["Sort Vacancies Descending by Match Score"]
+    SortDesc --> ReturnRanked["Display 15–20 Ranked Job Cards with Score Badges in UI"]
 ```
 
 ---
 
-### Use Case 5: Application Tailoring with Fact Critic Reflection Loop & Document Exports
+### Module 03: Application Tailoring Studio & Fact Critic Reflection Loop
 
 ```mermaid
 flowchart TD
-    SelectJob["User Selects Opportunity to Tailor"] --> RetrieveInsights["Retrieve or Auto-Fetch Company Insights from DB/Tavily"]
-    RetrieveInsights --> TriggerAgent["Trigger Application Tailoring Agent"]
+    SelectJob["User Selects Opportunity to Tailor"] --> RetrieveInsights["Retrieve or Auto-Fetch Company Insights from DB / Tavily"]
+    RetrieveInsights --> TriggerAgent["Trigger Multi-Agent Application Tailor"]
     
     TriggerAgent --> InitAttempt["Initialize: attempt = 1, feedback = empty"]
     
     subgraph CriticLoop ["Agentic Generator-Critic Loop (Max 3 Attempts)"]
-        InitAttempt --> GenNode["Generator Node: Craft Full CV, Cover Letter, Outreach Email"]
+        InitAttempt --> GenNode["Generator Node: Craft Full Tailored CV, Cover Letter, Outreach Email"]
         GenNode --> CriticNode{"Critic Node: Fact-Check Against Candidate's Original CV"}
         
         CriticNode -->|Pass: Zero hallucinations, accurate facts| CalcGap["Compute ATS Match Score Before vs After"]
@@ -161,18 +171,17 @@ flowchart TD
         CheckAttempts -->|No: Exhausted| CalcGap
     end
     
-    CalcGap --> RenderStudio["Render Application Studio with Inline Editors & Save to CRM CTA"]
+    CalcGap --> RenderStudio["Render Application Studio with Side-by-Side Editors & Save to CRM CTA"]
     
-    RenderStudio --> ExportActions{"User Clicks Download"}
+    RenderStudio --> ExportActions{"User Selects Download"}
     ExportActions -->|CV DOCX| DocxCV["Generate Microsoft Word CV (.docx)"]
     ExportActions -->|Letter DOCX| DocxLetter["Generate Microsoft Word Cover Letter (.docx)"]
     ExportActions -->|Email TXT| TxtEmail["Generate Plain Text Email (.txt)"]
-    ExportActions -->|Semantic HTML| HtmlExport["Render Semantic HTML (/export/html)"]
 ```
 
 ---
 
-### Use Case 6: 6-Stage Mini-CRM Pipeline Lifecycle
+### Module 04: 6-Stage Mini-CRM Pipeline Lifecycle
 
 ```mermaid
 stateDiagram-v2
@@ -189,49 +198,51 @@ stateDiagram-v2
 
 ---
 
-### Use Case 7: Stateful Mock Interview Multi-Turn Simulator
+### Module 05: Stateful Mock Interview Multi-Turn Simulator
 
 ```mermaid
 flowchart TD
     Start["User Starts Mock Interview"] --> SelectMode{"Select Mode"}
     
-    SelectMode -->|General| InitGeneral["Load Custom User Domain (e.g. Machine Learning, Cloud)"]
+    SelectMode -->|General| InitGeneral["Load Custom User Domain (e.g. Machine Learning, Backend)"]
     SelectMode -->|Technical| InitTech["Load Target Mini-CRM Job + Company Insights + Active CV"]
     SelectMode -->|Behavioral| InitBehav["Load Target Mini-CRM Job + Company Culture Values + Active CV"]
     
     InitGeneral & InitTech & InitBehav --> QuestionLoop["Generate Question 1 of N"]
     
     subgraph InterviewLoop ["Multi-Turn Interview State Machine"]
-        QuestionLoop --> WaitAnswer["Wait for Candidate Answer (Text input locked during evaluation)"]
+        QuestionLoop --> WaitAnswer["Wait for Candidate Answer (Input locked during evaluation)"]
         WaitAnswer --> EvalResponse["Evaluate Response against Domain / JD / STAR Framework"]
         
         EvalResponse --> MicroFeedback["Generate Immediate Micro-Feedback & Rubric Ratings"]
         MicroFeedback --> NextQ["Generate Contextual Follow-Up Question"] --> QuestionLoop
     end
     
-    InterviewLoop --> ConcludeAction["Candidate Clicks 'Conclude & Scorecard' or Completes Session"]
-    ConcludeAction --> FinalScorecard["Compile Comprehensive Evaluation Scorecard & Hiring Recommendation"]
+    InterviewLoop --> ConcludeAction["Candidate Clicks 'Conclude & Scorecard' or Completes Turns"]
+    ConcludeAction --> FinalScorecard["Compile 100-Point Evaluation Scorecard & Hiring Recommendation"]
     FinalScorecard --> SaveSession["Persist Session to PostgreSQL"]
-    SaveSession --> ExitCTA["Display Performance Breakdown + 'Exit Interview & Start New Session' Button"]
+    SaveSession --> ExitCTA["Display Performance Breakdown + 'Exit & Start New Session' Button"]
 ```
 
 ---
 
-### Use Case 8: Conversational Career Roadmap Planner with Feasibility Critic
+### Module 06: Conversational Career Roadmap Coach with Feasibility Critic
 
 ```mermaid
 flowchart TD
-    UserReq["User Sends Message in Roadmap Chat"] --> CheckInputs{"Required Inputs Present? (Target Role, Timeframe, Weekly Hours)"}
+    UserReq["User Sends Message in Roadmap Chat"] --> CheckIntent{"Conversational exploration vs Formal Roadmap?"}
     
-    CheckInputs -->|Missing Hours/Role| PromptUser["Input Gate: Prompt User to Specify Weekly Study Hours & Goal"]
+    CheckIntent -->|Career / Relocation / Market Advice| CoachMode["Provide Structured Markdown Strategy with Channel Tables & Schedules"]
+    CheckIntent -->|Explicit Roadmap Request| CheckInputs{"Target Role, Timeframe & Weekly Hours confirmed?"}
     
-    CheckInputs -->|All Fields Provided| LoadProfile["Read User Current Skills & Active CV"]
+    CheckInputs -->|Missing Hours/Role| PromptUser["Ask clarifying questions regarding weekly study availability"]
+    CheckInputs -->|All Parameters Present| LoadProfile["Read User Current Skills & Active CV"]
     
-    LoadProfile --> SearchTrends["Tavily Tool: Query Live Market Skill Trends & In-Demand Frameworks"]
+    LoadProfile --> SearchTrends["Tavily Tool: Query Live Market Skill Trends & In-Demand Tools"]
     SearchTrends --> InitRoadmapAttempt["Initialize: attempt = 1, feedback = empty"]
     
     subgraph FeasibilityCriticLoop ["Roadmap Generator-Critic Loop (Max 3 Attempts)"]
-        InitRoadmapAttempt --> GenRoadmap["Generator Node: Budget Workload Realistic for (Weeks * Hours/Week)"]
+        InitRoadmapAttempt --> GenRoadmap["Generator Node: Budget Workload Realistic for (Weeks * Hours/Week) across 4 Phases"]
         GenRoadmap --> FeasibilityCritic{"Feasibility Critic: Is Workload Feasible for Allocated Hours?"}
         
         FeasibilityCritic -->|Pass: Workload verified feasible| SaveRoadmap["Save to career_roadmaps Table in PostgreSQL"]
@@ -241,5 +252,6 @@ flowchart TD
         CheckRoadmapAttempts -->|No: Max attempts reached| SaveRoadmap
     end
     
-    SaveRoadmap --> RenderRoadmap["Render Feasibility-Verified Milestones with Project Deliverables in Chat"]
+    SaveRoadmap --> RenderRoadmap["Render 4-Phase Milestones with Concrete GitHub Portfolio Deliverables in Chat"]
 ```
+

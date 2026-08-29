@@ -2,7 +2,7 @@
 
 import logging
 from typing import Dict, Any, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from langchain_core.prompts import ChatPromptTemplate
 from backend.app.core.llm_factory import get_llm
 from backend.app.services.ats_engine import compute_job_specific_ats_match
@@ -12,16 +12,26 @@ logger = logging.getLogger(__name__)
 
 class TailoredApplicationOutput(BaseModel):
     tailored_professional_summary: str = Field(..., description="Compelling 2-3 sentence professional summary tailored specifically to the target role without inventing facts")
-    highlighted_skills: List[str] = Field(default_factory=list, description="Candidate's verified skills prioritized and aligned with target JD requirements")
-    tailored_experience: List[Dict[str, Any]] = Field(..., description="Tailored experience entries with rephrased bullets emphasizing target JD keywords")
+    highlighted_skills: Optional[List[str]] = Field(default_factory=list, description="Candidate's verified skills prioritized and aligned with target JD requirements")
+    tailored_experience: List[Dict[str, Any]] = Field(default_factory=list, description="Tailored experience entries with rephrased bullets emphasizing target JD keywords")
     cover_letter: str = Field(..., description="Professional, personalized cover letter referencing company context")
     cold_email: str = Field(..., description="Concise, high-impact 3-paragraph cold outreach email for hiring manager")
+
+    @field_validator("highlighted_skills", "tailored_experience", mode="before")
+    @classmethod
+    def convert_null_to_list(cls, v):
+        return v if v is not None else []
 
 
 class CriticEvaluation(BaseModel):
     passed: bool = Field(..., description="True if output is 100% factual and hallucination-free")
-    hallucinations_found: List[str] = Field(default_factory=list, description="Any invented technologies, roles, or claims not in original CV")
+    hallucinations_found: Optional[List[str]] = Field(default_factory=list, description="Any invented technologies, roles, or claims not in original CV")
     feedback: str = Field(..., description="Actionable feedback for the generator if rejected")
+
+    @field_validator("hallucinations_found", mode="before")
+    @classmethod
+    def convert_null_to_list(cls, v):
+        return v if v is not None else []
 
 
 GENERATOR_PROMPT = ChatPromptTemplate.from_messages([

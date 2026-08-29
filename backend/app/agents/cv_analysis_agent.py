@@ -2,7 +2,7 @@
 
 import logging
 from typing import Dict, Any, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from langchain_core.prompts import ChatPromptTemplate
 from backend.app.core.llm_factory import get_llm, compute_text_embedding
 from backend.app.services.ats_engine import compute_general_ats_score
@@ -25,7 +25,12 @@ class WorkExperienceItem(BaseModel):
     company: str = Field(..., description="Company name")
     dates: Optional[str] = Field(None, description="Employment dates / duration")
     location: Optional[str] = Field(None, description="Job location")
-    bullets: List[str] = Field(default_factory=list, description="List of accomplishment bullet points")
+    bullets: Optional[List[str]] = Field(default_factory=list, description="List of accomplishment bullet points")
+
+    @field_validator("bullets", mode="before")
+    @classmethod
+    def convert_bullets_null(cls, v):
+        return v if v is not None else []
 
 
 class EducationItem(BaseModel):
@@ -37,12 +42,25 @@ class EducationItem(BaseModel):
 class ParsedCVSchema(BaseModel):
     contact_info: ContactInfo
     professional_summary: Optional[str] = Field(None, description="Professional summary or bio")
-    sections_present: List[str] = Field(default_factory=list, description="Detected standard sections (e.g. Experience, Education, Skills, Projects)")
-    experience: List[WorkExperienceItem] = Field(default_factory=list, description="List of work experience entries")
-    experience_bullets: List[str] = Field(default_factory=list, description="Flat list of all individual experience bullet points")
-    education: List[EducationItem] = Field(default_factory=list, description="List of education entries")
-    skills_inventory: List[str] = Field(default_factory=list, description="All detected technical skills, tools, and frameworks")
-    certifications: List[str] = Field(default_factory=list, description="Certifications and licenses")
+    sections_present: Optional[List[str]] = Field(default_factory=list, description="Detected standard sections (e.g. Experience, Education, Skills, Projects)")
+    experience: Optional[List[WorkExperienceItem]] = Field(default_factory=list, description="List of work experience entries")
+    experience_bullets: Optional[List[str]] = Field(default_factory=list, description="Flat list of all individual experience bullet points")
+    education: Optional[List[EducationItem]] = Field(default_factory=list, description="List of education entries")
+    skills_inventory: Optional[List[str]] = Field(default_factory=list, description="All detected technical skills, tools, and frameworks")
+    certifications: Optional[List[str]] = Field(default_factory=list, description="Certifications and licenses")
+
+    @field_validator(
+        "sections_present",
+        "experience",
+        "experience_bullets",
+        "education",
+        "skills_inventory",
+        "certifications",
+        mode="before"
+    )
+    @classmethod
+    def convert_null_to_list(cls, v):
+        return v if v is not None else []
 
 
 EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([

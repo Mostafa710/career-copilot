@@ -6,9 +6,12 @@ Career Copilot is an end-to-end autonomous multi-agent platform designed to auto
 
 ## 🌟 Core Features & Multi-Agent Capabilities
 
-### 📄 1. Intelligent CV Ingestion & Dual-Mode Standard ATS Scoring Engine
+### 📄 1. Intelligent CV Ingestion, Version History & Dual-Mode Review
 * **Universal Document Ingestion:** High-fidelity native extraction for PDF (`pdfplumber`) and Word (`python-docx`), with automatic OCR fallback (`pytesseract`) for scanned/image resumes.
-* **Strict Single Active Resume Policy:** Enforces a clean single-file profile per user; uploading or pasting a new CV automatically purges previous disk files, text records, and database profile embeddings.
+* **Immutable CV Version History:** Maintains one current CV plus up to three previous versions (rolling 4-version history) with pinned protection for application-referenced snapshots, enabling visual timeline progress tracking and category score comparisons.
+* **Dual Review Modes:**
+  * *Specific Job Match:* Evaluates the active CV directly against a target job description and title using the transparent 5-Factor JD Match model with confidence scoring.
+  * *General Document Health:* Audits parseability, section hygiene, active language, and quantification density.
 * **Feature 1: Standard 5-Metric Standalone Resume Health Score:**
   $$S_{\text{standalone}} = (0.30 \times S_{\text{parse}}) + (0.25 \times S_{\text{impact}}) + (0.20 \times S_{\text{quant}}) + (0.15 \times S_{\text{hygiene}}) + (0.10 \times S_{\text{brevity}})$$
   * **Parseability (30%):** Standard section normalization (`Experience`, `Education`, `Skills`, `Projects`), layout scramble check.
@@ -25,7 +28,8 @@ Career Copilot is an end-to-end autonomous multi-agent platform designed to auto
   * **RapidAPI JSearch Client:** Queries live **LinkedIn** and **Indeed** postings (prioritized first).
   * **Wuzzuf Scraper:** High-speed async HTML scraper extracting top Egyptian tech job postings.
   * **Bayt Scraper:** High-speed async HTML scraper extracting Egyptian and Gulf job postings.
-* **Universal Live Web Fallback:** Tavily live web search queries `linkedin.com`, `wuzzuf.net`, and `bayt.com` for dynamic backfill if total $< 15$, delivering **15–20 distinct ranked jobs** per search.
+* **Anti-Aggregation Quality Gate:** Automatically detects and filters out generic search directory pages, aggregator portals, thin job descriptions, and invalid links to guarantee only authentic, verified individual job openings.
+* **Universal Live Web Fallback:** Tavily live web search queries `linkedin.com`, `wuzzuf.net`, and `bayt.com` for dynamic backfill if total $< 15$, delivering **15–20 distinct verified jobs** per search.
 * **Cross-Source SHA-256 Deduplication:** Computes normalized `sha256(company|title|location)` across all sources.
 * **Feature 2: Standard 5-Factor JD Target Match Engine:**
   $$S_{\text{match}} = (0.40 \times S_{\text{hard\_skills}}) + (0.25 \times S_{\text{semantic\_nlp}}) + (0.15 \times S_{\text{title\_align}}) + (0.10 \times S_{\text{exp\_years}}) + (0.10 \times S_{\text{soft\_skills}})$$
@@ -34,6 +38,13 @@ Career Copilot is an end-to-end autonomous multi-agent platform designed to auto
   * **Title & Seniority (15%):** Exact (100), Equivalent (90), Lateral (80), Seniority mismatch (50-60).
   * **Experience Duration & Recency (10%):** Meets/exceeds required years (100), 1-2 yrs below (70), >2 yrs below (40).
   * **Soft Skills (10%):** Stem-aware coverage for cross-functional collaboration, agile mindset, stakeholder management, and problem-solving.
+
+---
+
+### 🎨 3. Public Landing Page & Secure Auth Flow
+* **Finpay-Inspired Design Aesthetics:** Distinctive dark teal (`#102A2A`), primary teal (`#176B61`), soft mint (`#DDF2EA`), and warm ivory (`#FAFAF6`) visual identity.
+* **Interactive Public Discovery:** Hero section, connected feature architecture, how-it-works workflow, safety explanation, and interactive FAQ.
+* **Secure User Onboarding:** Full sign-in, sign-up with email verification codes, and persistent JWT session management.
 
 ### 🏢 3. On-Demand & Auto-Cached Company Intelligence
 * **PostgreSQL Fast Cache:** Retrieves company dossiers in $<5\text{ms}$ with zero external API calls if already queried.

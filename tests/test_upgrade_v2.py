@@ -62,16 +62,8 @@ def test_job_quality_rejects_search_pages_and_keeps_specific_postings():
     assert len(rejected) == 1
 
 
-def test_uae_job_goal_asks_application_timing_using_cv_role():
-    agent = CareerRoadmapAgent.__new__(CareerRoadmapAgent)
-    result = agent._job_search_conversation(
-        "I want a job in UAE",
-        [],
-        {"experience": [{"title": "AI Engineer"}]},
-    )
-
-    assert result["goal_type"] == "job_search"
-    assert result["needs_more_info"] is True
-    assert "AI Engineer" in result["response"]
-    assert "start applying" in result["response"]
-    assert result["suggested_replies"] == ["Immediately", "Within 1 month", "In 3 months"]
+def test_career_roadmap_agent_initialization():
+    agent = CareerRoadmapAgent()
+    assert agent.coach_llm is not None
+    assert agent.generator_llm is not None
+    assert agent.critic_llm is not None

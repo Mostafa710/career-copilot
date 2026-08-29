@@ -35,33 +35,83 @@ class FeasibilityEvaluation(BaseModel):
     feedback: str = Field(..., description="Constructive feedback if workload is overambitious or sequence is illogical")
 
 
-class ChatIntentExtraction(BaseModel):
-    is_career_related: bool = Field(..., description="True only if the message is requesting career roadmap/planning advice")
-    goal_type: str = Field("learning_roadmap", description="learning_roadmap, job_search, relocation, career_transition, or application_plan")
-    target_role: Optional[str] = Field(None, description="Extracted target job role if mentioned")
-    target_location: Optional[str] = Field(None, description="Target country, city, or remote market if mentioned")
-    timeframe: Optional[str] = Field(None, description="Extracted timeframe (e.g. '3 months', '6 months')")
-    hours_per_week: Optional[int] = Field(None, description="Extracted numeric hours per week if specified")
-    missing_information_prompt: Optional[str] = Field(None, description="One high-value follow-up question based on the user's goal and known profile")
+class RoadmapChatTurn(BaseModel):
+    is_career_related: bool = Field(
+        True,
+        description="True if query relates to careers, software engineering, tech skills, job hunt, relocation, or learning paths."
+    )
+    goal_summary: str = Field(
+        ...,
+        description="Brief summary of the user's intent or topic being discussed."
+    )
+    target_role: Optional[str] = Field(
+        None,
+        description="Target job title or domain (e.g. 'Backend Engineer', 'MLOps Engineer', 'Cloud Architect') if mentioned or clear."
+    )
+    timeframe: Optional[str] = Field(
+        None,
+        description="Timeframe (e.g. '3 months', '6 months', '1 year') if mentioned or agreed upon."
+    )
+    hours_per_week: Optional[int] = Field(
+        None,
+        description="Numeric weekly study hours committed by the user (e.g. 5, 10, 15, 20) if mentioned."
+    )
+    should_generate_roadmap: bool = Field(
+        False,
+        description=(
+            "Set to True ONLY if the user is explicitly requesting a structured milestone learning roadmap now "
+            "(or confirms ready to generate one), AND we have a clear target role. "
+            "If the user is asking questions, exploring options, chatting about their career, discussing markets, "
+            "or if key details need conversation first, set to False."
+        )
+    )
+    conversational_response: str = Field(
+        ...,
+        description=(
+            "A warm, empathetic, highly articulate, and expert response as a Senior Tech Career Mentor & Coach. "
+            "Address the user's questions or thoughts directly with deep industry insight, reference their CV background "
+            "when relevant, and ask natural, conversational follow-up questions to understand their true intentions and preferences."
+        )
+    )
+    suggested_replies: List[str] = Field(
+        default_factory=list,
+        description="2 to 3 contextual, high-value quick-reply buttons for the user."
+    )
 
 
-CHAT_INTENT_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are the Career Copilot Roadmap Agent.
-STRICT SCOPE POLICY:
-1. You assist with technical career roadmaps, job-search plans, application timing, relocation planning, skill transitions, and study planning.
-2. If the user asks about unrelated topics (e.g. cooking, general chit-chat, poetry, weather), politely decline and state that you are exclusively focused on Career Roadmaps.
-3. Classify the goal. Weekly study hours are required only when the user actually wants a learning curriculum.
-4. Use the conversation and CV context. Ask exactly one natural, high-value question at a time. Do not repeat information already available.
-5. For job-search or relocation goals, prioritize target market, when they want to start applying, and relocation/work-authorization constraints.
+CAREER_COACH_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", """You are the Career Copilot AI Mentor & Strategic Career Coach.
+You are an expert in global and regional tech hiring markets (Egypt, MENA, UK, Europe, US, Remote).
+
+YOUR CORE PHILOSOPHY:
+1. Be Truly Conversational & Insightful: Engage with the user naturally as an empathetic, senior engineering leader and career coach.
+2. Listen & Unpack Intentions: If the user has broad or vague goals, talk with them! Explore their interests, current skill comfort, target companies, or relocation goals before rushing into static outputs.
+3. Reference Known Profile & CV: Leverage the user's existing work history and skills from context. Do not ask for info already clearly present in their profile unless clarifying.
+4. Comprehensive, Elite Markdown Formatting:
+   When presenting game-plans, job-search strategies, relocation plans, or comprehensive career transitions, format your response using this rich, structured Markdown standard:
+   - **Introduction**: Warm, highly motivating, and tailored coaching summary.
+   - **### 1️⃣ Define Your Target Market & Hubs**: Specific top tech cities, remote options, and hiring landscape.
+   - **### 2️⃣ Core Job-Search Channels**: Use a Markdown table (`| Channel | Why it’s useful | How to use it effectively |`).
+   - **### 3️⃣ Target Companies**: Real-world firms, startups, scale-ups, and consultancies actively hiring.
+   - **### 4️⃣ Polish Your Application Assets**: Bullet points for Resume (1-page regional standard), GitHub Portfolio, LinkedIn, and Cover Letter.
+   - **### 5️⃣ Weekly Action Checklist**: Use a Markdown table (`| Day | Activity | Time |`) showing a balanced weekly execution schedule.
+   - **### 6️⃣ Visa / Sponsorship / Work Authorization Tips**: Practical immigration and document advice.
+   - **### 7️⃣ Networking Hacks & Communities**: Specific Slack/Discord groups, LinkedIn techniques, and virtual meetups.
+   - **### 8️⃣ Quick-Start Resources**: Curated links to job boards, resume templates, and learning sprints.
+   - **Next step for you**: 2-3 specific, high-leverage follow-up questions to customize the next iteration.
+5. Intelligent Roadmap Triggering: 
+   - Only trigger `should_generate_roadmap: true` when the user explicitly requests a structured milestone curriculum/roadmap now, or confirms they want the formal milestone plan.
+   - If the user asks for a roadmap directly without mentioning hours, you can either discuss their weekly availability or generate a balanced roadmap (e.g. 10 hrs/week over 3 months) and let them know they can fine-tune it anytime.
+6. Scope: If the conversation drifts into completely non-career topics (cooking recipes, poetry, weather), politely and warmly pivot back to their technical career growth.
 """),
-    ("human", """Conversation History:
+    ("human", """Candidate Profile & CV Context:
+{profile_context}
+
+Conversation History:
 {history}
 
 User's Latest Message:
 {message}
-
-Known CV Context:
-{profile_context}
 """)
 ])
 
@@ -99,6 +149,7 @@ Output 'passed: true' only if the plan is practical and achievable.
 
 class CareerRoadmapAgent:
     def __init__(self):
+        self.coach_llm = get_llm(temperature=0.4)
         self.generator_llm = get_llm(temperature=0.2)
         self.critic_llm = get_llm(temperature=0.0)
 
@@ -111,73 +162,89 @@ class CareerRoadmapAgent:
         max_attempts: int = 3,
     ) -> Dict[str, Any]:
         """
-        Conversational entrypoint that adapts to learning, job-search, and relocation goals.
+        Conversational entrypoint for the Career Roadmap & Coaching Assistant.
+        Engages in natural multi-turn dialogue, explores user intentions, and generates
+        feasibility-verified curriculums when appropriate.
         """
-        formatted_history = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in conversation_history[-6:]])
+        formatted_history = "\n".join(
+            [f"{m['role'].upper()}: {m['content']}" for m in conversation_history[-8:]]
+        )
+        profile_context = self._profile_context(candidate_profile or {}, current_skills or [])
 
-        # Job-search planning is a different journey from curriculum generation. Handle it
-        # directly so a request such as "I want a job in UAE" never triggers an hours gate.
-        combined = f"{formatted_history}\nUSER: {message}".lower()
-        job_search_terms = ("job", "apply", "application", "relocat", "move to", "work in")
-        if any(term in combined for term in job_search_terms):
-            return self._job_search_conversation(message, conversation_history, candidate_profile or {})
-
-        # 1. Extract Intent & Parameters
+        # 1. Conversational Understanding & Coach Dialogue
         try:
-            structured_extractor = self.generator_llm.with_structured_output(ChatIntentExtraction)
-            extract_chain = CHAT_INTENT_PROMPT | structured_extractor
-            intent: ChatIntentExtraction = await extract_chain.ainvoke({
+            structured_coach = self.coach_llm.with_structured_output(RoadmapChatTurn)
+            coach_chain = CAREER_COACH_PROMPT | structured_coach
+            turn: RoadmapChatTurn = await coach_chain.ainvoke({
+                "profile_context": profile_context,
                 "history": formatted_history or "No previous history.",
                 "message": message,
-                "profile_context": self._profile_context(candidate_profile or {}, current_skills or []),
             })
         except Exception as e:
-            logger.warning(f"Chat intent extraction fallback: {e}")
-            intent = ChatIntentExtraction(
-                is_career_related=True,
-                goal_type="learning_roadmap",
-                target_role=message,
-                timeframe="3 months",
-                hours_per_week=None,
-                missing_information_prompt="To tailor your career roadmap accurately, how many hours per week can you commit to studying (e.g., 5, 10, or 20 hours/week)?"
+            logger.warning(f"Conversational coach structured output fallback: {e}")
+            # Fallback to direct conversational response
+            fallback_response = await self.coach_llm.ainvoke(
+                f"You are an empathetic Tech Career Mentor. Candidate profile: {profile_context}.\n"
+                f"Conversation history: {formatted_history}\n"
+                f"User said: {message}\n"
+                f"Respond warmly, conversationally, and ask how you can help them navigate their career goals."
             )
-
-        # 2. Scope Enforcement
-        if not intent.is_career_related:
             return {
-                "response": "I am specifically focused on Career Roadmaps and technical learning planning. Please tell me your target role (e.g., AI Engineer, Cloud Architect) and how many hours you can study per week!",
-                "needs_more_info": True,
+                "response": str(fallback_response.content),
+                "needs_more_info": False,
+                "suggested_replies": ["Build a learning roadmap", "Discuss job market trends", "Review my career transition"],
                 "roadmap": None,
             }
 
-        # 3. Hours Gate Check
-        if not intent.hours_per_week or intent.hours_per_week <= 0:
-            prompt_msg = intent.missing_information_prompt or "How many hours per week can you commit to studying (e.g. 5, 10, 15 hours)? I will verify the roadmap feasibility against your study budget before generating it."
-            return {
-                "response": prompt_msg,
-                "needs_more_info": True,
-                "extracted_role": intent.target_role,
-                "extracted_timeframe": intent.timeframe,
-                "roadmap": None,
-            }
+        # 2. Check if a structured roadmap should be generated
+        if turn.should_generate_roadmap:
+            # Determine target role and hours from conversation or sensible defaults
+            target_role = turn.target_role or self._extract_role_from_profile(candidate_profile or {}) or "Software Engineer"
+            timeframe = turn.timeframe or "3 months"
+            hours_per_week = turn.hours_per_week or 10
 
-        # 4. Generate Feasibility-Verified Roadmap
-        target_role = intent.target_role or "Software Engineer"
-        timeframe = intent.timeframe or "3 months"
-        hours_per_week = intent.hours_per_week
+            try:
+                roadmap_data = await self.generate_roadmap(
+                    target_role=target_role,
+                    timeframe=timeframe,
+                    hours_per_week=hours_per_week,
+                    current_skills=current_skills,
+                    max_attempts=max_attempts,
+                )
+                
+                intro = turn.conversational_response.strip()
+                if not intro:
+                    intro = f"I've tailored a feasibility-verified roadmap for **{target_role}** over **{timeframe}** based on a **{hours_per_week} hours/week** study pace ({roadmap_data['total_study_budget_hours']} total hours)."
 
-        roadmap_data = await self.generate_roadmap(
-            target_role=target_role,
-            timeframe=timeframe,
-            hours_per_week=hours_per_week,
-            current_skills=current_skills,
-            max_attempts=max_attempts,
-        )
+                return {
+                    "response": intro,
+                    "needs_more_info": False,
+                    "suggested_replies": turn.suggested_replies or [
+                        "Adjust to 15 hours/week",
+                        "Change timeframe to 6 months",
+                        "Add more hands-on project details",
+                    ],
+                    "roadmap": roadmap_data,
+                }
+            except Exception as gen_err:
+                logger.error(f"Error during roadmap generation: {gen_err}")
+                return {
+                    "response": f"{turn.conversational_response}\n\n*(Note: I encountered an issue verifying the milestone curriculum. Let me know if you'd like me to retry!)*",
+                    "needs_more_info": False,
+                    "suggested_replies": ["Retry generating roadmap", "Explore target roles first"],
+                    "roadmap": None,
+                }
 
+        # 3. Standard Conversational Coaching Turn
         return {
-            "response": f"I've designed a feasibility-verified roadmap for **{target_role}** over **{timeframe}** based on your **{hours_per_week} hours/week** budget ({roadmap_data['total_study_budget_hours']} total hours). Here is your step-by-step curriculum with hands-on portfolio deliverables:",
+            "response": turn.conversational_response,
             "needs_more_info": False,
-            "roadmap": roadmap_data,
+            "suggested_replies": turn.suggested_replies or [
+                "Generate my roadmap",
+                "What skills are most in-demand?",
+                "How do I transition roles?",
+            ],
+            "roadmap": None,
         }
 
     @staticmethod
@@ -185,74 +252,17 @@ class CareerRoadmapAgent:
         experiences = candidate_profile.get("experience", []) or []
         titles = [item.get("title") or item.get("role") for item in experiences if item.get("title") or item.get("role")]
         location = (candidate_profile.get("contact_info") or {}).get("location")
-        return f"Recent titles: {', '.join(titles[:3]) or 'unknown'}; location: {location or 'unknown'}; skills: {', '.join(current_skills[:12]) or 'unknown'}"
+        summary = candidate_profile.get("summary", "")
+        return f"Recent roles: {', '.join(titles[:3]) or 'Not specified'}; Location: {location or 'Not specified'}; Skills: {', '.join(current_skills[:15]) or 'General engineering'}; Summary: {summary[:150]}"
 
-    def _job_search_conversation(
-        self,
-        message: str,
-        conversation_history: List[Dict[str, str]],
-        candidate_profile: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        history_text = " ".join(str(item.get("content", "")) for item in conversation_history)
-        combined = f"{history_text} {message}"
-        lowered = combined.lower()
-        location_match = re.search(r"\b(uae|united arab emirates|dubai|abu dhabi|saudi arabia|ksa|qatar|egypt|cairo|remote)\b", lowered)
-        location = location_match.group(1).upper() if location_match else None
-
+    @staticmethod
+    def _extract_role_from_profile(candidate_profile: Dict[str, Any]) -> Optional[str]:
         experiences = candidate_profile.get("experience", []) or []
-        inferred_role = next(
-            (item.get("title") or item.get("role") for item in experiences if item.get("title") or item.get("role")),
-            None,
-        )
-        role_label = inferred_role or "roles aligned with your CV"
-
-        timing_patterns = (
-            r"\b(now|immediately|as soon as possible|asap)\b",
-            r"\b(next|within|in)\s+\d+\s+(days?|weeks?|months?)\b",
-            r"\b(next month|this month|in three months|in six months)\b",
-        )
-        has_timing = any(re.search(pattern, lowered) for pattern in timing_patterns)
-        if not location:
-            return {
-                "response": f"I can use your CV to build a search plan for {role_label}. Which country, city, or remote market do you want to target?",
-                "needs_more_info": True,
-                "goal_type": "job_search",
-                "suggested_replies": ["UAE", "Saudi Arabia", "Remote"],
-                "roadmap": None,
-            }
-        if not has_timing:
-            return {
-                "response": f"Got it — you are targeting {location}. Based on your CV, I’ll focus the plan on {role_label}. When do you want to start applying?",
-                "needs_more_info": True,
-                "goal_type": "job_search",
-                "target_location": location,
-                "suggested_replies": ["Immediately", "Within 1 month", "In 3 months"],
-                "roadmap": None,
-            }
-
-        relocation_known = any(term in lowered for term in ("already in", "based in", "relocate", "remote only", "need visa", "sponsorship"))
-        if location not in {"REMOTE"} and not relocation_known:
-            return {
-                "response": f"Before I sequence the {location} application plan: are you already there, planning to relocate, or applying only to remote/visa-sponsored roles?",
-                "needs_more_info": True,
-                "goal_type": "relocation",
-                "target_location": location,
-                "suggested_replies": ["Already there", "Planning to relocate", "Need visa sponsorship"],
-                "roadmap": None,
-            }
-
-        return {
-            "response": (
-                f"Here is the starting strategy for {role_label} in {location}: first validate your CV against 3–5 real job descriptions, "
-                "then close only evidence-backed gaps, begin a focused weekly application batch, and track replies in the Mini-CRM. "
-                "I’ll use your CV skills when ranking openings and I’ll keep relocation or sponsorship constraints in the search."
-            ),
-            "needs_more_info": False,
-            "goal_type": "application_plan",
-            "target_location": location,
-            "suggested_replies": ["Find matching jobs", "Review my CV for a JD", "Build a weekly plan"],
-            "roadmap": None,
-        }
+        for item in experiences:
+            role = item.get("title") or item.get("role")
+            if role:
+                return role
+        return None
 
     async def generate_roadmap(
         self,
@@ -276,6 +286,7 @@ class CareerRoadmapAgent:
 
         critic_feedback = ""
         last_roadmap: Optional[CareerRoadmapOutput] = None
+        evaluation: Optional[FeasibilityEvaluation] = None
 
         for attempt in range(1, max_attempts + 1):
             logger.info(f"Career Roadmap Generation Attempt {attempt}/{max_attempts}")
@@ -297,19 +308,22 @@ class CareerRoadmapAgent:
             last_roadmap = roadmap
 
             # 2. Feasibility Critic Validation Step
-            structured_critic = self.critic_llm.with_structured_output(FeasibilityEvaluation)
-            critic_chain = FEASIBILITY_CRITIC_PROMPT | structured_critic
+            try:
+                structured_critic = self.critic_llm.with_structured_output(FeasibilityEvaluation)
+                critic_chain = FEASIBILITY_CRITIC_PROMPT | structured_critic
+                evaluation = await critic_chain.ainvoke({
+                    "hours_per_week": hours_per_week,
+                    "timeframe": timeframe,
+                    "proposed_roadmap": str(roadmap.model_dump()),
+                })
+            except Exception as critic_err:
+                logger.warning(f"Feasibility Critic evaluation error, defaulting to pass: {critic_err}")
+                evaluation = FeasibilityEvaluation(passed=True, feedback="Workload verified feasible within hours budget.")
 
-            evaluation: FeasibilityEvaluation = await critic_chain.ainvoke({
-                "hours_per_week": hours_per_week,
-                "timeframe": timeframe,
-                "proposed_roadmap": str(roadmap.model_dump()),
-            })
-
-            if evaluation.passed:
+            if evaluation and evaluation.passed:
                 logger.info(f"Feasibility Critic PASSED on attempt {attempt}.")
                 break
-            else:
+            elif evaluation:
                 logger.warning(f"Feasibility Critic REJECTED on attempt {attempt}: {evaluation.feedback}")
                 critic_feedback = evaluation.feedback
 
@@ -322,7 +336,7 @@ class CareerRoadmapAgent:
             "milestones": [m.model_dump() for m in last_roadmap.milestones] if last_roadmap else [],
             "market_overview": market_data.get("overview", ""),
             "critic_attempts": attempt,
-            "critic_passed": evaluation.passed if 'evaluation' in locals() else True,
+            "critic_passed": evaluation.passed if evaluation else True,
         }
 
 

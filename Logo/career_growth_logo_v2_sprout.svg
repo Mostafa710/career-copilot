@@ -1,0 +1,31 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img">
+<title>Career growth logo, sprout concept</title>
+<desc>A friendly sprout growing out of ascending bars, symbolizing career growth</desc>
+
+<!-- ascending bars -->
+<rect x="130" y="330" width="56" height="90" rx="10" fill="#85B7EB"/>
+<rect x="204" y="280" width="56" height="140" rx="10" fill="#378ADD"/>
+<rect x="278" y="220" width="56" height="200" rx="10" fill="#185FA5"/>
+<rect x="352" y="160" width="56" height="260" rx="10" fill="#0C447C"/>
+
+<!-- stem -->
+<path d="M380,160 C380,120 380,95 380,70" stroke="#1D9E75" stroke-width="10" fill="none" stroke-linecap="round"/>
+
+<!-- leaves -->
+<path d="M380,110 C340,100 320,70 330,40 C370,45 390,75 380,110 Z" fill="#5DCAA5"/>
+<path d="M380,90 C420,80 445,50 435,20 C395,25 372,58 380,90 Z" fill="#1D9E75"/>
+
+<!-- face on the top leaf cluster -->
+<circle cx="360" cy="50" r="4.5" fill="#04342C"/>
+<circle cx="384" cy="46" r="4.5" fill="#04342C"/>
+<path d="M362,64 Q372,74 386,62" stroke="#04342C" stroke-width="5" fill="none" stroke-linecap="round"/>
+
+<!-- rosy cheeks -->
+<circle cx="352" cy="58" r="6" fill="#D85A30" opacity="0.3"/>
+<circle cx="394" cy="54" r="6" fill="#D85A30" opacity="0.3"/>
+
+<!-- sparkles -->
+<circle cx="440" cy="120" r="6" fill="#FAC775"/>
+<circle cx="460" cy="90" r="4" fill="#F0997B"/>
+<circle cx="100" cy="260" r="5" fill="#9FE1CB"/>
+</svg>

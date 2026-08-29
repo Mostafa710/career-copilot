@@ -1786,6 +1786,14 @@ export default function CareerCopilotApp() {
                   >
                     <Download className="w-4 h-4 text-emerald-600" /> Letter (DOCX)
                   </button>
+                  {tailoredApp.cold_email && (
+                    <button
+                      onClick={() => handleDownloadEmailTxt(tailoredApp.cold_email, selectedJob?.company || "Hiring_Manager")}
+                      className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-2 shadow-xs cursor-pointer"
+                    >
+                      <Download className="w-4 h-4 text-emerald-600" /> Email (TXT)
+                    </button>
+                  )}
                   <button
                     onClick={handleSaveToCRM}
                     className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm transition-all cursor-pointer"
@@ -1903,7 +1911,15 @@ export default function CareerCopilotApp() {
                     <div className="space-y-2.5">
                       <div className="flex items-center justify-between">
                         <h3 className="tag-mono text-sm font-bold text-slate-600 dark:text-slate-400 uppercase">Cold Outreach Email</h3>
-                        <button onClick={() => navigator.clipboard.writeText(tailoredApp.cold_email || "")} className="tag-mono text-xs sm:text-sm font-bold text-emerald-600 hover:underline cursor-pointer">Copy</button>
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => handleDownloadEmailTxt(tailoredApp.cold_email, selectedJob?.company || "Hiring_Manager")}
+                            className="tag-mono text-xs sm:text-sm font-bold text-emerald-600 hover:underline flex items-center gap-1 cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Download (.txt)
+                          </button>
+                          <button onClick={() => navigator.clipboard.writeText(tailoredApp.cold_email || "")} className="tag-mono text-xs sm:text-sm font-bold text-emerald-600 hover:underline cursor-pointer">Copy</button>
+                        </div>
                       </div>
                       <textarea
                         value={tailoredApp.cold_email}
@@ -2439,6 +2455,14 @@ export default function CareerCopilotApp() {
                         className="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 font-bold rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-xs cursor-pointer"
                       >
                         <Download className="w-4 h-4 text-emerald-600" /> Letter (DOCX)
+                      </button>
+                    )}
+                    {selectedCRMApp.cold_email && (
+                      <button
+                        onClick={() => handleDownloadEmailTxt(selectedCRMApp.cold_email, selectedCRMApp.company || "Hiring_Manager")}
+                        className="px-3.5 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-900 dark:text-slate-100 font-bold rounded-lg border border-slate-200 dark:border-slate-800 flex items-center gap-1.5 shadow-xs cursor-pointer"
+                      >
+                        <Download className="w-4 h-4 text-emerald-600" /> Email (TXT)
                       </button>
                     )}
                   </div>

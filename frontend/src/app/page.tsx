@@ -561,6 +561,7 @@ export default function CareerCopilotApp() {
       return;
     }
     setSelectedJob(job);
+    setTailoredApp(null);
     setActiveTab("tailor");
     setTailorLoading(true);
     try {
@@ -573,6 +574,7 @@ export default function CareerCopilotApp() {
         const data = await res.json();
         setTailoredApp(data);
       } else {
+        setTailoredApp(null);
         const errData = await res.json().catch(() => ({}));
         const detail = errData.detail;
         const message = typeof detail === "string" ? detail : detail?.message;
@@ -583,13 +585,14 @@ export default function CareerCopilotApp() {
       }
     } catch (err) {
       console.error("Tailor error:", err);
+      setTailoredApp(null);
     } finally {
       setTailorLoading(false);
     }
   };
 
   const handleSaveToCRM = async () => {
-    if (!tailoredApp || !selectedJob) return;
+    if (!tailoredApp || !tailoredApp.critic_passed || !selectedJob) return;
     try {
       const res = await authFetch("/application/save-crm", {
         method: "POST",

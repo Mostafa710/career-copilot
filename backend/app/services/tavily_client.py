@@ -105,17 +105,17 @@ class TavilyClient:
                     "market_insights": [],
                 }
 
-    async def search_live_jobs(self, query: str, location: Optional[str] = "Egypt", max_results: int = 10) -> List[Dict[str, Any]]:
-        """Fetch live web job postings from LinkedIn, Wuzzuf, Bayt, Glassdoor for any MENA location."""
+    async def search_live_jobs(self, query: str, location: Optional[str] = "Egypt", max_results: int = 15) -> List[Dict[str, Any]]:
+        """Fetch live direct vacancy postings from LinkedIn, Wuzzuf, and Bayt for any MENA location."""
         if not self.is_configured():
             return []
 
-        search_query = f"{query} jobs {location or 'Egypt'} hiring 2026"
+        # Target direct vacancy posting endpoints to avoid directory/search aggregate index pages
+        search_query = f'"{query}" (site:linkedin.com/jobs/view/ OR site:wuzzuf.net/jobs/p/ OR site:bayt.com/en/egypt/jobs/) {location or "Egypt"}'
         payload = {
             "api_key": self.api_key,
             "query": search_query,
             "search_depth": "advanced",
-            "include_domains": ["linkedin.com", "wuzzuf.net", "bayt.com", "glassdoor.com", "indeed.com"],
             "max_results": max_results,
         }
 
@@ -129,12 +129,44 @@ class TavilyClient:
                 parsed_jobs = []
                 for r in results:
                     title_raw = r.get("title", f"{query} Opening")
-                    parts = title_raw.split(" - ") if " - " in title_raw else title_raw.split(" | ")
-                    title = parts[0].strip() if parts else title_raw
-                    company = parts[1].strip() if len(parts) > 1 else "Tech Employer"
-                    
-                    desc = r.get("content", f"Open position for {query} in {location or 'Egypt'}.")
                     url = r.get("url", "")
+                    desc = r.get("content", f"Open position for {query} in {location or 'Egypt'}.")
+
+                    # Smart Company & Title Extraction
+                    company = "Identified Employer"
+                    title = title_raw
+
+                    if " hiring " in title_raw:
+                        h_parts = title_raw.split(" hiring ", 1)
+                        company = h_parts[0].strip()
+                        title = h_parts[1].split(" in ")[0].strip() if " in " in h_parts[1] else h_parts[1].strip()
+                    elif " job at " in title_raw:
+                        at_parts = title_raw.split(" job at ", 1)
+                        title = at_parts[0].strip()
+                        company = at_parts[1].split(" in ")[0].strip() if " in " in at_parts[1] else at_parts[1].strip()
+                    elif " at " in title_raw:
+                        at_parts = title_raw.split(" at ", 1)
+                        title = at_parts[0].strip()
+                        company = at_parts[1].split(" in ")[0].strip() if " in " in at_parts[1] else at_parts[1].strip()
+                    elif " - " in title_raw:
+                        dash_parts = title_raw.split(" - ")
+                        title = dash_parts[0].strip()
+                        company = dash_parts[1].strip() if len(dash_parts) > 1 else "Identified Employer"
+                    elif " | " in title_raw:
+                        pipe_parts = title_raw.split(" | ")
+                        title = pipe_parts[0].strip()
+                        company = pipe_parts[1].strip() if len(pipe_parts) > 1 else "Identified Employer"
+
+                    # Clean company name from platform branding
+                    for brand in ["LinkedIn Jobs", "LinkedIn", "Wuzzuf", "Bayt", "Glassdoor", "Indeed"]:
+                        if company.lower() == brand.lower():
+                            company = "Identified Employer"
+                        elif brand in company:
+                            company = company.replace(brand, "").strip(" -|·")
+
+                    if not company:
+                        company = "Identified Employer"
+
                     content_hash = compute_job_content_hash(company, title, location or "Egypt")
                     
                     # Detect source from URL

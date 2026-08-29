@@ -51,7 +51,13 @@ class MarketResearchAgent:
         RapidAPI JSearch (LinkedIn & Indeed), with Tavily live search backfill.
         Guarantees 7–10 distinct jobs.
         """
-        prefs = user_preferences or {}
+        if isinstance(user_preferences, dict):
+            prefs = user_preferences
+        elif isinstance(user_preferences, str):
+            prefs = {"location": user_preferences, "target_role": query}
+        else:
+            prefs = {}
+
         default_role = prefs.get("target_role") or (candidate_skills[0] if candidate_skills else "Software Engineer")
         default_country = prefs.get("default_country", "Egypt")
 

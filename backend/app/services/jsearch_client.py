@@ -8,15 +8,22 @@ from backend.app.config import settings
 
 logger = logging.getLogger(__name__)
 
-JSEARCH_API_URL = "https://jsearch.p.rapidapi.com/search"
+JSEARCH_API_URL = "https://jsearch.p.rapidapi.com/search-v2"
 
 
 class JSearchClient:
     """Client for RapidAPI JSearch endpoint (LinkedIn & Indeed aggregator)."""
 
     def __init__(self):
-        self.api_key = settings.RAPIDAPI_KEY
-        self.host = settings.RAPIDAPI_JSEARCH_HOST
+        pass
+
+    @property
+    def api_key(self) -> Optional[str]:
+        return settings.RAPIDAPI_KEY
+
+    @property
+    def host(self) -> str:
+        return settings.RAPIDAPI_JSEARCH_HOST or "jsearch.p.rapidapi.com"
 
     def _compute_hash(self, company: str, title: str, location: str) -> str:
         raw = f"{company.strip().lower()}|{title.strip().lower()}|{location.strip().lower()}"
@@ -32,13 +39,14 @@ class JSearchClient:
         """
         Queries live LinkedIn and Indeed listings via RapidAPI JSearch.
         """
-        if not self.api_key:
+        api_key = self.api_key
+        if not api_key or api_key.startswith("your_"):
             logger.info("RapidAPI key not configured; skipping JSearch live query.")
             return []
 
         search_query = f"{query} in {location}" if location else query
         headers = {
-            "x-rapidapi-key": self.api_key,
+            "x-rapidapi-key": api_key,
             "x-rapidapi-host": self.host,
         }
         params = {
@@ -48,15 +56,36 @@ class JSearchClient:
             "date_posted": "all",
         }
 
+        endpoints = [
+            "https://jsearch.p.rapidapi.com/search-v2",
+            "https://jsearch.p.rapidapi.com/search",
+        ]
+
         try:
             async with httpx.AsyncClient(timeout=12.0) as client:
-                resp = await client.get(JSEARCH_API_URL, headers=headers, params=params)
-                if resp.status_code != 200:
-                    logger.warning(f"JSearch API returned HTTP {resp.status_code}: {resp.text[:200]}")
+                resp = None
+                for ep in endpoints:
+                    resp = await client.get(ep, headers=headers, params=params)
+                    if resp.status_code == 200:
+                        break
+                    elif resp.status_code == 404:
+                        continue
+                    else:
+                        break
+
+                if not resp or resp.status_code != 200:
+                    logger.warning(f"JSearch API returned HTTP {resp.status_code if resp else 'N/A'}: {resp.text[:200] if resp else ''}")
                     return []
 
-                data = resp.json()
-                raw_jobs = data.get("data", [])
+                json_data = resp.json()
+                data_payload = json_data.get("data", [])
+                if isinstance(data_payload, dict):
+                    raw_jobs = data_payload.get("jobs", [])
+                elif isinstance(data_payload, list):
+                    raw_jobs = data_payload
+                else:
+                    raw_jobs = []
+
                 return self._normalize_jobs(raw_jobs)
 
         except Exception as e:

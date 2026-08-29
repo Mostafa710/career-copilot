@@ -10,6 +10,7 @@ from backend.app.services.wuzzuf_scraper import wuzzuf_scraper
 from backend.app.services.bayt_scraper import bayt_scraper
 from backend.app.services.jsearch_client import jsearch_client
 from backend.app.services.tavily_client import tavily_client
+from backend.app.services.job_quality import keep_actual_job_postings
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,12 @@ class MarketResearchAgent:
                         if c_hash:
                             seen_hashes.add(c_hash)
 
-        logger.info(f"Primary MENA sources returned {len(collected_jobs)} distinct jobs.")
+        collected_jobs, rejected_primary = keep_actual_job_postings(collected_jobs)
+        logger.info(
+            "Primary sources returned %s verified postings; rejected %s aggregate/incomplete pages.",
+            len(collected_jobs),
+            len(rejected_primary),
+        )
 
         # 2. Universal Dynamic Backfill via Tavily Live Web Search if fewer than 15 jobs
         if len(collected_jobs) < 15 and tavily_client.is_configured():
@@ -106,7 +112,9 @@ class MarketResearchAgent:
                 location=location,
                 max_results=20 - len(collected_jobs),
             )
-            for tj in tavily_jobs:
+            verified_tavily_jobs, rejected_tavily = keep_actual_job_postings(tavily_jobs)
+            logger.info("Tavily quality gate rejected %s non-posting results.", len(rejected_tavily))
+            for tj in verified_tavily_jobs:
                 c_hash = tj.get("content_hash")
                 ext_id = tj.get("external_id")
                 if ext_id not in seen_ids and c_hash not in seen_hashes:

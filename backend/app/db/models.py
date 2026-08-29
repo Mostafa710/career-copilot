@@ -8,6 +8,7 @@ from sqlalchemy import (
     Text,
     Float,
     Integer,
+    Boolean,
     DateTime,
     ForeignKey,
     UniqueConstraint,
@@ -42,6 +43,7 @@ class User(Base):
 
     # Relationships
     profile = relationship("UserProfile", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    cv_versions = relationship("CVVersion", back_populates="user", cascade="all, delete-orphan")
     applications = relationship("Application", back_populates="user", cascade="all, delete-orphan")
     interview_sessions = relationship("InterviewSession", back_populates="user", cascade="all, delete-orphan")
     career_roadmaps = relationship("CareerRoadmap", back_populates="user", cascade="all, delete-orphan")
@@ -63,6 +65,37 @@ class UserProfile(Base):
 
     # Relationships
     user = relationship("User", back_populates="profile")
+
+
+class CVVersion(Base):
+    """Immutable CV snapshot; one current version and up to three normal archives per user."""
+    __tablename__ = "cv_versions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    version_number = Column(Integer, nullable=False)
+    source_type = Column(String(32), nullable=False, default="unknown")
+    raw_storage_key = Column(String(512), nullable=True)
+    raw_file_name = Column(String(255), nullable=True)
+    raw_text = Column(Text, nullable=True)
+    content_hash = Column(String(64), nullable=False, index=True)
+    parsed_data = Column(JSONB, nullable=False, default=dict)
+    parse_confidence = Column(String(20), nullable=False, default="unknown")
+    document_readiness_result = Column(JSONB, nullable=False, default=dict)
+    resume_quality_result = Column(JSONB, nullable=False, default=dict)
+    embedding = Column(Vector(384), nullable=True)
+    scoring_engine_version = Column(String(64), nullable=False, default="legacy")
+    change_summary = Column(JSONB, nullable=False, default=dict)
+    is_current = Column(Boolean, nullable=False, default=False, index=True)
+    is_pinned = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), default=get_utc_now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "version_number", name="uq_cv_version_user_number"),
+    )
+
+    user = relationship("User", back_populates="cv_versions")
+    applications = relationship("Application", back_populates="source_cv_version")
 
 
 class Job(Base):
@@ -104,6 +137,8 @@ class Application(Base):
     ats_score_before = Column(Float, nullable=True)
     ats_score_after = Column(Float, nullable=True)
     notes = Column(Text, nullable=True)
+    source_cv_version_id = Column(UUID(as_uuid=True), ForeignKey("cv_versions.id", ondelete="SET NULL"), nullable=True, index=True)
+    source_evidence_snapshot = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), default=get_utc_now)
     updated_at = Column(DateTime(timezone=True), default=get_utc_now, onupdate=get_utc_now)
 
@@ -114,6 +149,7 @@ class Application(Base):
     # Relationships
     user = relationship("User", back_populates="applications")
     job = relationship("Job", back_populates="applications")
+    source_cv_version = relationship("CVVersion", back_populates="applications")
 
 
 class InterviewSession(Base):

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from backend.app.db.session import get_db
-from backend.app.db.models import User, Job, Application
+from backend.app.db.models import User, Job, Application, CVVersion
 from backend.app.agents.application_tailor import application_tailor_agent
 from backend.app.services.doc_exporter import document_exporter
 from backend.app.api.deps import get_current_user
@@ -27,6 +27,7 @@ class SaveApplicationRequest(BaseModel):
     ats_score_before: Optional[float] = None
     ats_score_after: Optional[float] = None
     notes: Optional[str] = None
+    source_cv_version_id: Optional[uuid.UUID] = None
 
 
 class SaveJobRequest(BaseModel):
@@ -106,11 +107,31 @@ async def tailor_application_for_job(
         max_attempts=3,
     )
 
+    if not result["critic_passed"]:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "TAILORING_FACT_CHECK_FAILED",
+                "message": "The generated application could not be verified after three attempts. No unverified content was returned or exported.",
+                "critic_attempts": result["critic_attempts"],
+                "issues": result.get("hallucinations_found", []),
+                "feedback": result.get("critic_feedback", ""),
+            },
+        )
+
+    source_version = (
+        db.query(CVVersion)
+        .filter(CVVersion.user_id == user.id, CVVersion.is_current.is_(True))
+        .order_by(CVVersion.version_number.desc())
+        .first()
+    )
+
     return {
         "status": "success",
         "job_id": str(job.id),
         "job_title": job.title,
         "company": job.company,
+        "source_cv_version_id": str(source_version.id) if source_version else None,
         "tailored_cv_data": result["tailored_cv_data"],
         "cover_letter": result["cover_letter"],
         "cold_email": result["cold_email"],
@@ -118,6 +139,9 @@ async def tailor_application_for_job(
         "ats_score_after": result["ats_score_after"],
         "critic_attempts": result["critic_attempts"],
         "critic_passed": result["critic_passed"],
+        "export_allowed": result["export_allowed"],
+        "match_details_before": result["match_details_before"],
+        "match_details_after": result["match_details_after"],
     }
 
 
@@ -197,6 +221,27 @@ def save_application_to_crm(
     if req.notes is not None:
         app.notes = req.notes
 
+    source_version_query = db.query(CVVersion).filter(CVVersion.user_id == user.id)
+    if req.source_cv_version_id is not None:
+        source_version = source_version_query.filter(CVVersion.id == req.source_cv_version_id).first()
+        if source_version is None:
+            raise HTTPException(status_code=400, detail="The source CV version does not belong to this user.")
+    else:
+        source_version = (
+            source_version_query
+            .filter(CVVersion.is_current.is_(True))
+            .order_by(CVVersion.version_number.desc())
+            .first()
+        )
+    if source_version is not None:
+        app.source_cv_version_id = source_version.id
+        app.source_evidence_snapshot = {
+            "cv_version_id": str(source_version.id),
+            "content_hash": source_version.content_hash,
+            "parsed_data": source_version.parsed_data,
+            "scoring_engine_version": source_version.scoring_engine_version,
+        }
+
     db.commit()
     db.refresh(app)
 
@@ -239,6 +284,7 @@ def get_crm_applications(
             "cover_letter": a.cover_letter,
             "cold_email": a.cold_email,
             "updated_at": a.updated_at.isoformat() if a.updated_at else None,
+            "source_cv_version_id": str(a.source_cv_version_id) if a.source_cv_version_id else None,
         })
     return {"status": "success", "count": len(results), "applications": results}
 
@@ -274,6 +320,7 @@ def get_crm_application_details(
         "cover_letter": app.cover_letter,
         "cold_email": app.cold_email,
         "updated_at": app.updated_at.isoformat() if app.updated_at else None,
+        "source_cv_version_id": str(app.source_cv_version_id) if app.source_cv_version_id else None,
     }
 
 

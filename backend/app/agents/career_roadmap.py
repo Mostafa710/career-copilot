@@ -37,28 +37,31 @@ class FeasibilityEvaluation(BaseModel):
 
 class ChatIntentExtraction(BaseModel):
     is_career_related: bool = Field(..., description="True only if the message is requesting career roadmap/planning advice")
+    goal_type: str = Field("learning_roadmap", description="learning_roadmap, job_search, relocation, career_transition, or application_plan")
     target_role: Optional[str] = Field(None, description="Extracted target job role if mentioned")
+    target_location: Optional[str] = Field(None, description="Target country, city, or remote market if mentioned")
     timeframe: Optional[str] = Field(None, description="Extracted timeframe (e.g. '3 months', '6 months')")
     hours_per_week: Optional[int] = Field(None, description="Extracted numeric hours per week if specified")
-    missing_information_prompt: Optional[str] = Field(None, description="Polite question asking for missing parameters, specifically weekly study hours")
+    missing_information_prompt: Optional[str] = Field(None, description="One high-value follow-up question based on the user's goal and known profile")
 
 
 CHAT_INTENT_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """You are the Career Copilot Roadmap Agent.
 STRICT SCOPE POLICY:
-1. You ONLY assist with technical career roadmaps, skill transitions, learning pathways, and study planning.
+1. You assist with technical career roadmaps, job-search plans, application timing, relocation planning, skill transitions, and study planning.
 2. If the user asks about unrelated topics (e.g. cooking, general chit-chat, poetry, weather), politely decline and state that you are exclusively focused on Career Roadmaps.
-3. To generate an accurate roadmap, you MANDATORILY require:
-   - Target Role (e.g. "Cloud Architect", "AI Engineer")
-   - Timeframe (e.g. "3 months", "6 months", "1 year")
-   - Weekly Study Hours (e.g. 5, 10, 15, 20 hrs/week)
-4. If Weekly Study Hours is NOT explicitly provided by the user, you MUST set is_career_related=true and missing_information_prompt asking them specifically how many hours per week they can commit before proceeding.
+3. Classify the goal. Weekly study hours are required only when the user actually wants a learning curriculum.
+4. Use the conversation and CV context. Ask exactly one natural, high-value question at a time. Do not repeat information already available.
+5. For job-search or relocation goals, prioritize target market, when they want to start applying, and relocation/work-authorization constraints.
 """),
     ("human", """Conversation History:
 {history}
 
 User's Latest Message:
 {message}
+
+Known CV Context:
+{profile_context}
 """)
 ])
 
@@ -104,12 +107,20 @@ class CareerRoadmapAgent:
         message: str,
         conversation_history: List[Dict[str, str]],
         current_skills: Optional[List[str]] = None,
+        candidate_profile: Optional[Dict[str, Any]] = None,
         max_attempts: int = 3,
     ) -> Dict[str, Any]:
         """
-        Conversational chat entrypoint with scope enforcement, hours gate, and Feasibility Critic.
+        Conversational entrypoint that adapts to learning, job-search, and relocation goals.
         """
         formatted_history = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in conversation_history[-6:]])
+
+        # Job-search planning is a different journey from curriculum generation. Handle it
+        # directly so a request such as "I want a job in UAE" never triggers an hours gate.
+        combined = f"{formatted_history}\nUSER: {message}".lower()
+        job_search_terms = ("job", "apply", "application", "relocat", "move to", "work in")
+        if any(term in combined for term in job_search_terms):
+            return self._job_search_conversation(message, conversation_history, candidate_profile or {})
 
         # 1. Extract Intent & Parameters
         try:
@@ -118,11 +129,13 @@ class CareerRoadmapAgent:
             intent: ChatIntentExtraction = await extract_chain.ainvoke({
                 "history": formatted_history or "No previous history.",
                 "message": message,
+                "profile_context": self._profile_context(candidate_profile or {}, current_skills or []),
             })
         except Exception as e:
             logger.warning(f"Chat intent extraction fallback: {e}")
             intent = ChatIntentExtraction(
                 is_career_related=True,
+                goal_type="learning_roadmap",
                 target_role=message,
                 timeframe="3 months",
                 hours_per_week=None,
@@ -165,6 +178,80 @@ class CareerRoadmapAgent:
             "response": f"I've designed a feasibility-verified roadmap for **{target_role}** over **{timeframe}** based on your **{hours_per_week} hours/week** budget ({roadmap_data['total_study_budget_hours']} total hours). Here is your step-by-step curriculum with hands-on portfolio deliverables:",
             "needs_more_info": False,
             "roadmap": roadmap_data,
+        }
+
+    @staticmethod
+    def _profile_context(candidate_profile: Dict[str, Any], current_skills: List[str]) -> str:
+        experiences = candidate_profile.get("experience", []) or []
+        titles = [item.get("title") or item.get("role") for item in experiences if item.get("title") or item.get("role")]
+        location = (candidate_profile.get("contact_info") or {}).get("location")
+        return f"Recent titles: {', '.join(titles[:3]) or 'unknown'}; location: {location or 'unknown'}; skills: {', '.join(current_skills[:12]) or 'unknown'}"
+
+    def _job_search_conversation(
+        self,
+        message: str,
+        conversation_history: List[Dict[str, str]],
+        candidate_profile: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        history_text = " ".join(str(item.get("content", "")) for item in conversation_history)
+        combined = f"{history_text} {message}"
+        lowered = combined.lower()
+        location_match = re.search(r"\b(uae|united arab emirates|dubai|abu dhabi|saudi arabia|ksa|qatar|egypt|cairo|remote)\b", lowered)
+        location = location_match.group(1).upper() if location_match else None
+
+        experiences = candidate_profile.get("experience", []) or []
+        inferred_role = next(
+            (item.get("title") or item.get("role") for item in experiences if item.get("title") or item.get("role")),
+            None,
+        )
+        role_label = inferred_role or "roles aligned with your CV"
+
+        timing_patterns = (
+            r"\b(now|immediately|as soon as possible|asap)\b",
+            r"\b(next|within|in)\s+\d+\s+(days?|weeks?|months?)\b",
+            r"\b(next month|this month|in three months|in six months)\b",
+        )
+        has_timing = any(re.search(pattern, lowered) for pattern in timing_patterns)
+        if not location:
+            return {
+                "response": f"I can use your CV to build a search plan for {role_label}. Which country, city, or remote market do you want to target?",
+                "needs_more_info": True,
+                "goal_type": "job_search",
+                "suggested_replies": ["UAE", "Saudi Arabia", "Remote"],
+                "roadmap": None,
+            }
+        if not has_timing:
+            return {
+                "response": f"Got it — you are targeting {location}. Based on your CV, I’ll focus the plan on {role_label}. When do you want to start applying?",
+                "needs_more_info": True,
+                "goal_type": "job_search",
+                "target_location": location,
+                "suggested_replies": ["Immediately", "Within 1 month", "In 3 months"],
+                "roadmap": None,
+            }
+
+        relocation_known = any(term in lowered for term in ("already in", "based in", "relocate", "remote only", "need visa", "sponsorship"))
+        if location not in {"REMOTE"} and not relocation_known:
+            return {
+                "response": f"Before I sequence the {location} application plan: are you already there, planning to relocate, or applying only to remote/visa-sponsored roles?",
+                "needs_more_info": True,
+                "goal_type": "relocation",
+                "target_location": location,
+                "suggested_replies": ["Already there", "Planning to relocate", "Need visa sponsorship"],
+                "roadmap": None,
+            }
+
+        return {
+            "response": (
+                f"Here is the starting strategy for {role_label} in {location}: first validate your CV against 3–5 real job descriptions, "
+                "then close only evidence-backed gaps, begin a focused weekly application batch, and track replies in the Mini-CRM. "
+                "I’ll use your CV skills when ranking openings and I’ll keep relocation or sponsorship constraints in the search."
+            ),
+            "needs_more_info": False,
+            "goal_type": "application_plan",
+            "target_location": location,
+            "suggested_replies": ["Find matching jobs", "Review my CV for a JD", "Build a weekly plan"],
+            "roadmap": None,
         }
 
     async def generate_roadmap(

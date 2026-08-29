@@ -21,7 +21,9 @@ COMMON_TECH_KEYWORDS = {
     "kubernetes", "aws", "gcp", "azure", "terraform", "ci/cd", "git", "linux",
     "graphql", "rest api", "pytorch", "tensorflow", "langchain", "langgraph",
     "llm", "rag", "sql", "tailwind", "pandas", "spark", "kafka", "microservices",
-    "system design", "html", "css", "c++", "c#", "java", "golang", "rust"
+    "system design", "html", "css", "c++", "c#", "java", "golang", "rust",
+    "machine learning", "deep learning", "computer vision", "data science",
+    "natural language processing", "linear algebra", "statistics", "probability"
 }
 
 
@@ -80,10 +82,18 @@ class JobMatchingAgent:
             job_card["keyword_analysis"] = ats_match.get("keyword_analysis", {})
             job_card["extracted_skills"] = required_skills
             job_card["actionable_recommendations"] = ats_match.get("actionable_recommendations", [])
+            job_card["score_available"] = ats_match.get("score_available", True)
+            job_card["score_confidence"] = ats_match.get("score_confidence")
+            job_card["factor_availability"] = ats_match.get("factor_availability", {})
+            job_card["effective_weights"] = ats_match.get("effective_weights", {})
+            job_card["scoring_engine_version"] = ats_match.get("scoring_engine_version")
             ranked_results.append(job_card)
 
         # Sort descending by weighted match score
-        ranked_results.sort(key=lambda x: x.get("match_score", 0), reverse=True)
+        ranked_results.sort(
+            key=lambda x: x.get("match_score") if isinstance(x.get("match_score"), (int, float)) else -1,
+            reverse=True,
+        )
         return ranked_results
 
 

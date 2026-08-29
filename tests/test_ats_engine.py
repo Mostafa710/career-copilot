@@ -124,7 +124,11 @@ def test_job_specific_ats_match_5_factors():
 
     assert match["mode"] == "MATCH_SCORE"
     assert "overall_score" in match
-    assert match["rating_tier"] in ["Good", "Excellent"]
+    # With no JD embedding, the engine must use the real sparse score rather
+    # than the legacy favorable 70% cosine default.
+    assert match["rating_tier"] in ["Average", "Good", "Excellent"]
+    assert match["score_confidence"] == "Medium"
+    assert match["semantic_components"]["cosine_similarity"] is None
 
     sub = match["sub_scores"]
     assert "hard_skills" in sub
@@ -135,6 +139,7 @@ def test_job_specific_ats_match_5_factors():
 
     assert sub["title_alignment"] >= 95.0  # Exact match on Senior Backend Engineer
     assert sub["soft_skills"] >= 80.0  # Matched collaboration, agile, problem-solving
+    assert sub["experience_years"] is None  # Position count is no longer converted into fake years
     assert "kubernetes" in match["missing_skills"]
     assert "aws" in match["missing_skills"]
     assert "docker" in match["matched_skills"]

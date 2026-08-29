@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useTheme } from "next-themes";
+import PublicLanding from "./components/PublicLanding";
 import {
   FileText,
   Search,
@@ -61,11 +62,22 @@ export default function CareerCopilotApp() {
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [userEmail, setUserEmail] = useState("");
+  const [authPanelOpen, setAuthPanelOpen] = useState(false);
 
   // User & CV State
   const [activeCV, setActiveCV] = useState<any>(null);
   const [cvLoading, setCvLoading] = useState(false);
   const [pasteText, setPasteText] = useState("");
+  const [selectedCVFile, setSelectedCVFile] = useState<File | null>(null);
+  const [cvVersions, setCvVersions] = useState<any[]>([]);
+  const [cvReviewMode, setCvReviewMode] = useState<"targeted" | "general">("targeted");
+  const [targetRole, setTargetRole] = useState("");
+  const [targetJobDescription, setTargetJobDescription] = useState("");
+  const [cvReview, setCvReview] = useState<any>(null);
+  const [cvReviewLoading, setCvReviewLoading] = useState(false);
+  const [cvReviewError, setCvReviewError] = useState("");
+  const [suggestionDecisions, setSuggestionDecisions] = useState<Record<string, "accepted" | "ignored">>({});
+  const [suggestionEdits, setSuggestionEdits] = useState<Record<string, string>>({});
 
   // Job Search & Matcher Modal State
   const [searchQuery, setSearchQuery] = useState("Software Engineer");
@@ -103,7 +115,7 @@ export default function CareerCopilotApp() {
     {
       role: "assistant",
       content:
-        "SYS // INITIALIZED: Career Roadmap Planner online.\n\nSpecify your target career role (e.g. *AI Engineer*, *Cloud Architect*) and weekly study availability (hours/week) to generate a feasibility-verified curriculum.",
+        "Tell me what outcome you want. I can use your CV to plan a job search, relocation, career transition, or a learning roadmap—and I’ll ask only the next question that matters.",
     },
   ]);
   const [roadmapInput, setRoadmapInput] = useState("");
@@ -119,6 +131,7 @@ export default function CareerCopilotApp() {
       setToken(storedToken);
       if (storedEmail) setUserEmail(storedEmail);
       fetchActiveCV(storedToken);
+      fetchCVVersions(storedToken);
       fetchCRM(storedToken);
     }
   }, []);
@@ -168,6 +181,7 @@ export default function CareerCopilotApp() {
       localStorage.setItem("career_copilot_email", data.email);
 
       fetchActiveCV(data.access_token);
+      fetchCVVersions(data.access_token);
       fetchCRM(data.access_token);
     } catch (err: any) {
       setAuthError("Unable to connect to backend server. Ensure API is running on port 8000.");
@@ -184,6 +198,7 @@ export default function CareerCopilotApp() {
     setTailoredApp(null);
     setCrmApplications([]);
     setInterviewSession(null);
+    setAuthPanelOpen(false);
     localStorage.removeItem("career_copilot_token");
     localStorage.removeItem("career_copilot_email");
   };
@@ -214,9 +229,26 @@ export default function CareerCopilotApp() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const fetchCVVersions = async (authToken = token) => {
+    try {
+      const res = await authFetch("/cv/versions", {}, authToken);
+      if (res.ok) {
+        const data = await res.json();
+        setCvVersions(data.versions || []);
+      }
+    } catch (e) {
+      console.log("CV versions fetch note:", e);
+    }
+  };
+
+  const handleFileSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
+    setSelectedCVFile(e.target.files[0]);
+  };
+
+  const handleFileUpload = async () => {
+    if (!selectedCVFile) return;
+    const file = selectedCVFile;
     const formData = new FormData();
     formData.append("file", file);
 
@@ -234,6 +266,8 @@ export default function CareerCopilotApp() {
           general_ats_score: data.general_ats_score,
           parsed_profile: data.parsed_profile,
         });
+        setSelectedCVFile(null);
+        fetchCVVersions();
       }
     } catch (err) {
       console.error("Upload error:", err);
@@ -260,12 +294,67 @@ export default function CareerCopilotApp() {
           parsed_profile: data.parsed_profile,
         });
         setPasteText("");
+        fetchCVVersions();
       }
     } catch (err) {
       console.error("Paste error:", err);
     } finally {
       setCvLoading(false);
     }
+  };
+
+  const handleCVReview = async (mode = cvReviewMode) => {
+    if (!activeCV) {
+      setCvReviewError("Upload or paste your CV first.");
+      return;
+    }
+    setCvReviewError("");
+    setCvReviewLoading(true);
+    setSuggestionDecisions({});
+    try {
+      const res = await authFetch("/cv/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode,
+          target_role: mode === "targeted" ? targetRole : null,
+          job_description: mode === "targeted" ? targetJobDescription : null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setCvReviewError(typeof data.detail === "string" ? data.detail : "The review could not be completed.");
+        return;
+      }
+      setCvReview(data);
+      setSuggestionEdits(Object.fromEntries((data.suggestions || []).map((item: any) => [item.id, item.suggested_text])));
+    } catch (err) {
+      console.error("CV review error:", err);
+      setCvReviewError("Unable to connect to the CV review service.");
+    } finally {
+      setCvReviewLoading(false);
+    }
+  };
+
+  const copyAcceptedCorrections = async () => {
+    const accepted = (cvReview?.suggestions || [])
+      .filter((item: any) => suggestionDecisions[item.id] === "accepted")
+      .map((item: any) => `${item.section}\n${suggestionEdits[item.id] || item.suggested_text}`)
+      .join("\n\n");
+    if (accepted) await navigator.clipboard.writeText(accepted);
+  };
+
+  const copyTailoredCVText = async (cvData: any) => {
+    if (!cvData) return;
+    const experience = (cvData.experience || []).map((exp: any) =>
+      `${exp.title || ""} — ${exp.company || ""}\n${(exp.bullets || []).map((bullet: string) => `• ${bullet}`).join("\n")}`
+    ).join("\n\n");
+    const text = [
+      cvData.professional_summary ? `PROFESSIONAL SUMMARY\n${cvData.professional_summary}` : "",
+      cvData.skills?.length ? `SKILLS\n${cvData.skills.join(", ")}` : "",
+      experience ? `EXPERIENCE\n${experience}` : "",
+    ].filter(Boolean).join("\n\n");
+    if (text) await navigator.clipboard.writeText(text);
   };
 
   const handleSearchJobs = async () => {
@@ -354,8 +443,12 @@ export default function CareerCopilotApp() {
         setTailoredApp(data);
       } else {
         const errData = await res.json().catch(() => ({}));
-        alert(errData.detail || "Please upload and analyze your CV in the 'CV Analysis' tab first.");
-        setActiveTab("cv");
+        const detail = errData.detail;
+        const message = typeof detail === "string" ? detail : detail?.message;
+        alert(message || "The application could not be tailored safely. Please try again.");
+        if (detail?.code !== "TAILORING_FACT_CHECK_FAILED") {
+          setActiveTab("cv");
+        }
       }
     } catch (err) {
       console.error("Tailor error:", err);
@@ -378,6 +471,7 @@ export default function CareerCopilotApp() {
           cold_email: tailoredApp.cold_email,
           ats_score_before: tailoredApp.ats_score_before,
           ats_score_after: tailoredApp.ats_score_after,
+          source_cv_version_id: tailoredApp.source_cv_version_id,
         }),
       });
       if (res.ok) {
@@ -642,6 +736,7 @@ export default function CareerCopilotApp() {
             role: "assistant",
             content: data.response,
             roadmap: data.roadmap,
+            suggestedReplies: data.suggested_replies || [],
           },
         ]);
       } else {
@@ -649,7 +744,7 @@ export default function CareerCopilotApp() {
           ...prev,
           {
             role: "assistant",
-            content: "ERR // Roadmap generation encountered an error. Ensure target role and weekly study hours are specified.",
+            content: "I could not continue the plan just now. Please try that message again.",
           },
         ]);
       }
@@ -687,9 +782,18 @@ export default function CareerCopilotApp() {
 
   // Unauthenticated Flow: Architectural Gate Screen
   if (!token) {
+    if (!authPanelOpen) {
+      return (
+        <PublicLanding
+          onSignIn={() => { setAuthMode("login"); setAuthError(""); setAuthPanelOpen(true); }}
+          onRegister={() => { setAuthMode("register"); setAuthError(""); setAuthPanelOpen(true); }}
+        />
+      );
+    }
     return (
       <div className="min-h-screen bg-white dark:bg-[#07090e] bg-grid-pattern flex flex-col items-center justify-center p-6 text-slate-900 dark:text-slate-100">
         <div className="w-full max-w-md space-y-6">
+          <button onClick={() => setAuthPanelOpen(false)} className="text-xs font-bold text-[#176B61] hover:underline">← Back to Career Copilot</button>
           {/* Header */}
           <div className="text-center space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-[11px] font-mono text-slate-600 dark:text-slate-400">
@@ -797,12 +901,12 @@ export default function CareerCopilotApp() {
 
   // Authenticated Main Surface
   return (
-    <div className="min-h-screen bg-white dark:bg-[#07090e] bg-grid-pattern text-slate-900 dark:text-slate-100 transition-colors">
+    <div className="min-h-screen bg-[#FAFAF6] dark:bg-[#071614] bg-grid-pattern text-slate-900 dark:text-slate-100 transition-colors">
       {/* Top Dock Navigation */}
-      <header className="sticky top-0 z-40 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-[#07090e]/90 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-[#D9E5E1] dark:border-[#23423E] bg-[#FAFAF6]/90 dark:bg-[#071614]/90 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-slate-900 dark:bg-indigo-600 flex items-center justify-center text-white font-mono font-black text-xs shadow-sm">
+            <div className="w-8 h-8 rounded-lg bg-[#102A2A] dark:bg-[#176B61] flex items-center justify-center text-white font-mono font-black text-xs shadow-sm">
               CC
             </div>
             <div>
@@ -901,8 +1005,44 @@ export default function CareerCopilotApp() {
                 [MODULE // 01: CV ANALYSIS & ATS AUDIT]
               </span>
               <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white mt-1">
-                Deterministic 100-Point Resume Audit
+                CV review: general health or one specific job
               </h2>
+            </div>
+
+            <div className="arch-card corner-cross overflow-hidden">
+              <div className="grid lg:grid-cols-[.8fr_1.2fr]">
+                <div className="bg-[#102A2A] p-6 text-white">
+                  <span className="text-[10px] font-black uppercase tracking-[.18em] text-[#CDEB8B]">Choose the scoring context</span>
+                  <h3 className="mt-3 text-2xl font-black">A useful ATS estimate needs context.</h3>
+                  <p className="mt-3 text-sm leading-6 text-white/65">Targeted mode compares this CV with one real job description. General mode only checks document health and never presents itself as a vacancy match.</p>
+                  <div className="mt-6 flex rounded-xl bg-white/10 p-1 text-xs font-bold">
+                    <button onClick={() => setCvReviewMode("targeted")} className={`flex-1 rounded-lg px-3 py-2.5 ${cvReviewMode === "targeted" ? "bg-[#CDEB8B] text-[#102A2A]" : "text-white/70"}`}>Specific job</button>
+                    <button onClick={() => setCvReviewMode("general")} className={`flex-1 rounded-lg px-3 py-2.5 ${cvReviewMode === "general" ? "bg-[#CDEB8B] text-[#102A2A]" : "text-white/70"}`}>General CV</button>
+                  </div>
+                </div>
+                <div className="space-y-4 p-6">
+                  {cvReviewMode === "targeted" ? (
+                    <>
+                      <label className="block text-xs font-black uppercase tracking-wide text-slate-600 dark:text-slate-300">Specific job role
+                        <input value={targetRole} onChange={(e) => setTargetRole(e.target.value)} placeholder="e.g. Machine Learning Engineer" className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal normal-case tracking-normal outline-none focus:border-[#23877A] dark:border-slate-800 dark:bg-slate-950" />
+                      </label>
+                      <label className="block text-xs font-black uppercase tracking-wide text-slate-600 dark:text-slate-300">Job description
+                        <textarea value={targetJobDescription} onChange={(e) => setTargetJobDescription(e.target.value)} rows={5} placeholder="Paste the full description for the exact vacancy..." className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-normal normal-case tracking-normal outline-none focus:border-[#23877A] dark:border-slate-800 dark:bg-slate-950" />
+                      </label>
+                    </>
+                  ) : (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+                      <strong className="block">General CV health only</strong>
+                      This checks parsing, action language, measurable evidence, contact hygiene, and brevity. It cannot tell you whether this CV fits a particular employer or vacancy.
+                    </div>
+                  )}
+                  {cvReviewError && <div className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"><AlertCircle className="h-4 w-4 shrink-0" />{cvReviewError}</div>}
+                  <button onClick={() => handleCVReview()} disabled={cvReviewLoading || !activeCV || (cvReviewMode === "targeted" && (!targetRole.trim() || targetJobDescription.trim().length < 80))} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#176B61] py-3 text-xs font-black text-white hover:bg-[#102A2A] disabled:opacity-40">
+                    {cvReviewLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                    {cvReviewMode === "targeted" ? "Analyze CV against this job" : "Run general CV health review"}
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -921,18 +1061,42 @@ export default function CareerCopilotApp() {
                   <input
                     type="file"
                     accept=".pdf,.docx,.doc,.txt"
-                    onChange={handleFileUpload}
+                    onChange={handleFileSelection}
                     className="hidden"
                     id="cv-file-input"
                   />
                   <label htmlFor="cv-file-input" className="cursor-pointer flex flex-col items-center gap-2">
                     <FileText className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
                     <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                      Upload Resume File
+                      {selectedCVFile ? "Choose a different file" : "Upload Resume File"}
                     </span>
                     <span className="tag-mono text-[10px] text-slate-400">PDF (with OCR fallback) & DOCX</span>
                   </label>
                 </div>
+
+                {selectedCVFile && (
+                  <div className="space-y-3 rounded-xl border border-indigo-200 dark:border-indigo-900 bg-indigo-50/60 dark:bg-indigo-950/30 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100 block">{selectedCVFile.name}</span>
+                        <span className="tag-mono text-[9px] text-slate-500">
+                          {(selectedCVFile.size / 1024).toFixed(1)} KB • Ready to review
+                        </span>
+                      </div>
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    </div>
+                    <p className="text-[10px] text-slate-600 dark:text-slate-300">
+                      We will check document readability, experience evidence, skills, contact details, and improvement opportunities. Nothing is rewritten automatically.
+                    </p>
+                    <button
+                      onClick={handleFileUpload}
+                      disabled={cvLoading}
+                      className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-mono font-bold rounded-lg shadow-sm transition-all"
+                    >
+                      {cvLoading ? "Analyzing your CV..." : "Analyze & improve my CV →"}
+                    </button>
+                  </div>
+                )}
 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
@@ -1095,6 +1259,73 @@ export default function CareerCopilotApp() {
                 )}
               </div>
             </div>
+
+            {cvReview && (
+              <div className="arch-card corner-cross p-5 sm:p-6">
+                <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between">
+                  <div><span className="text-[10px] font-black uppercase tracking-[.18em] text-[#23877A]">{cvReview.scope_label}</span><h3 className="mt-1 text-xl font-black text-slate-900 dark:text-white">Problems paired with controlled corrections</h3><p className="mt-2 max-w-3xl text-xs leading-5 text-slate-500">{cvReview.disclaimer}</p></div>
+                  {cvReview.target_match && <div className="min-w-28 rounded-xl bg-[#DDF2EA] p-3 text-right text-[#102A2A]"><span className="block text-3xl font-black">{cvReview.target_match.match_score ?? "N/A"}</span><span className="text-[9px] font-black uppercase">Target match</span><span className="mt-1 block text-[9px]">{cvReview.target_match.score_confidence} confidence</span></div>}
+                </div>
+                <div className="mt-5 space-y-4">
+                  {(cvReview.suggestions || []).length ? cvReview.suggestions.map((item: any) => {
+                    const decision = suggestionDecisions[item.id];
+                    return (
+                      <article key={item.id} className={`rounded-2xl border p-4 ${decision === "accepted" ? "border-emerald-300 bg-emerald-50/30 dark:border-emerald-900 dark:bg-emerald-950/10" : decision === "ignored" ? "border-slate-200 opacity-60 dark:border-slate-800" : "border-slate-200 dark:border-slate-800"}`}>
+                        <div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2"><span className="rounded-full bg-slate-100 px-2 py-1 text-[9px] font-black uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-300">{item.section}</span><span className="text-xs font-black text-slate-900 dark:text-white">{item.category}</span></div>{item.requires_confirmation && <span className="rounded-full bg-amber-100 px-2 py-1 text-[9px] font-black uppercase text-amber-800">Confirm evidence before use</span>}</div>
+                        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                          <div className="rounded-xl border border-red-100 bg-red-50 p-4 dark:border-red-950 dark:bg-red-950/20"><span className="text-[9px] font-black uppercase tracking-wider text-red-600">Current CV / missing evidence</span><p className="mt-2 text-xs leading-5 text-red-950 dark:text-red-100">{item.source_text}</p></div>
+                          <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4 dark:border-emerald-950 dark:bg-emerald-950/20"><span className="text-[9px] font-black uppercase tracking-wider text-emerald-700">Suggested correction or action</span><textarea value={suggestionEdits[item.id] ?? item.suggested_text} onChange={(e) => setSuggestionEdits((prev) => ({ ...prev, [item.id]: e.target.value }))} rows={3} className="mt-2 w-full resize-y bg-transparent text-xs leading-5 text-emerald-950 outline-none dark:text-emerald-100" /></div>
+                        </div>
+                        <p className="mt-3 text-[11px] leading-5 text-slate-500">{item.rationale}</p>
+                        <div className="mt-3 flex flex-wrap gap-2"><button onClick={() => setSuggestionDecisions((prev) => ({ ...prev, [item.id]: "accepted" }))} className="rounded-lg bg-[#176B61] px-3 py-2 text-[10px] font-black text-white">{item.requires_confirmation ? "I verified / keep in draft" : "Accept into draft"}</button><button onClick={() => setSuggestionDecisions((prev) => ({ ...prev, [item.id]: "ignored" }))} className="rounded-lg border border-slate-200 px-3 py-2 text-[10px] font-black dark:border-slate-700">Ignore</button><button onClick={() => navigator.clipboard.writeText(suggestionEdits[item.id] || item.suggested_text)} className="rounded-lg border border-slate-200 px-3 py-2 text-[10px] font-black dark:border-slate-700">Copy</button></div>
+                      </article>
+                    );
+                  }) : <div className="rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">No source-linked corrections were found in the parsed CV.</div>}
+                </div>
+                {Object.values(suggestionDecisions).some((value) => value === "accepted") && <div className="mt-5 flex items-center justify-between gap-4 rounded-xl bg-[#102A2A] p-4 text-white"><span className="text-xs">Accepted corrections stay in a review draft until you paste them into your CV.</span><button onClick={copyAcceptedCorrections} className="shrink-0 rounded-lg bg-[#CDEB8B] px-4 py-2 text-xs font-black text-[#102A2A]">Copy accepted corrections</button></div>}
+              </div>
+            )}
+
+            {cvVersions.length > 0 && (
+              <div className="arch-card corner-cross p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <span className="tag-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase">CV Progress</span>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Current and previous versions</h3>
+                  </div>
+                  <span className="tag-mono text-[9px] text-slate-500">1 current • up to 3 archived</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                  {cvVersions.map((version) => (
+                    <div
+                      key={version.id}
+                      className={`rounded-lg border p-3 ${version.is_current ? "border-indigo-300 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/30" : "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950"}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="tag-mono text-[10px] font-black text-slate-900 dark:text-slate-100">VERSION {version.version_number}</span>
+                        {version.is_current && (
+                          <span className="tag-mono text-[8px] px-1.5 py-0.5 rounded bg-indigo-600 text-white">CURRENT</span>
+                        )}
+                      </div>
+                      <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate mt-2">{version.filename || "Pasted CV"}</p>
+                      <div className="flex items-end justify-between mt-3">
+                        <span className="text-[9px] text-slate-500">
+                          {version.created_at ? new Date(version.created_at).toLocaleDateString() : "Date unavailable"}
+                        </span>
+                        <span className="font-mono text-lg font-black text-indigo-600 dark:text-indigo-400">
+                          {version.resume_quality_result?.overall_score ?? "N/A"}
+                        </span>
+                      </div>
+                      {version.change_summary?.score_delta != null && (
+                        <p className={`tag-mono text-[9px] mt-2 ${version.change_summary.score_delta >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                          {version.change_summary.score_delta >= 0 ? "+" : ""}{version.change_summary.score_delta} points from previous
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1106,8 +1337,9 @@ export default function CareerCopilotApp() {
                 [MODULE // 02: MARKET RESEARCH & HYBRID MATCHING]
               </span>
               <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white mt-1">
-                LinkedIn, Indeed, Wuzzuf & Bayt Market Radar
+                Verified individual job openings
               </h2>
+              <p className="mt-2 text-xs text-slate-500">Search and category pages are rejected. Every result must identify one vacancy, include meaningful job detail, and link to that posting.</p>
             </div>
 
             {/* Search Bar */}
@@ -1134,6 +1366,9 @@ export default function CareerCopilotApp() {
 
             {/* Job Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {!jobsLoading && jobs.length === 0 && (
+                <div className="arch-card col-span-full p-8 text-center"><Search className="mx-auto h-7 w-7 text-[#23877A]" /><h3 className="mt-3 text-sm font-black">Search for individual vacancies</h3><p className="mt-1 text-xs text-slate-500">If sources return only job-board category pages, the list stays empty rather than showing misleading results.</p></div>
+              )}
               {jobs.map((job, idx) => (
                 <div
                   key={idx}
@@ -1150,16 +1385,21 @@ export default function CareerCopilotApp() {
                           <span className="tag-mono text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase font-bold border border-slate-200 dark:border-slate-700">
                             {job.source ? `[${job.source.toUpperCase()}]` : "[MENA // RADAR]"}
                           </span>
+                          {job.listing_quality === "individual_posting" && <span className="tag-mono rounded bg-[#DDF2EA] px-1.5 py-0.5 text-[8px] font-black uppercase text-[#176B61]">Verified posting</span>}
                           <span className="tag-mono text-[10px] text-slate-500 flex items-center gap-1">
                             <Building className="w-3 h-3" /> {job.company} • <MapPin className="w-3 h-3" /> {job.location || "Egypt / MENA"}
                           </span>
                         </div>
                       </div>
-                      {job.match_score !== undefined && (
+                      {job.match_score != null ? (
                         <div className="tag-mono px-2.5 py-1 rounded-md text-xs font-black bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shrink-0">
                           {job.match_score}% MATCH
                         </div>
-                      )}
+                      ) : job.score_available === false ? (
+                        <div className="tag-mono px-2.5 py-1 rounded-md text-xs font-black bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shrink-0">
+                          MATCH N/A
+                        </div>
+                      ) : null}
                     </div>
 
                     <p className="text-xs text-slate-600 dark:text-slate-300 mt-3 line-clamp-3 leading-relaxed">
@@ -1224,7 +1464,7 @@ export default function CareerCopilotApp() {
                   Fact-Checked Full Resume & Document Suite
                 </h2>
               </div>
-              {tailoredApp && (
+              {tailoredApp?.critic_passed && (
                 <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
                   <button
                     onClick={() => handleDownloadCVDocx(tailoredApp.tailored_cv_data, activeCV?.parsed_profile?.contact_info?.name || "Candidate")}
@@ -1263,22 +1503,27 @@ export default function CareerCopilotApp() {
             ) : tailoredApp ? (
               <div className="space-y-6">
                 {/* Fact Critic Badge */}
-                <div className="p-4 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 flex items-center justify-between">
+                <div className={`p-4 rounded-lg border flex items-center justify-between ${tailoredApp.critic_passed ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60" : "bg-red-50/70 dark:bg-red-950/30 border-red-200 dark:border-red-900/60"}`}>
                   <div className="flex items-center gap-3">
-                    <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    <ShieldCheck className={`w-5 h-5 ${tailoredApp.critic_passed ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`} />
                     <div>
-                      <span className="tag-mono text-xs font-bold text-emerald-900 dark:text-emerald-200 block">
-                        FACT CRITIC: {tailoredApp.critic_passed ? "PASSED" : "REVIEWED"} (ATTEMPT {tailoredApp.critic_attempts}/3)
+                      <span className={`tag-mono text-xs font-bold block ${tailoredApp.critic_passed ? "text-emerald-900 dark:text-emerald-200" : "text-red-900 dark:text-red-200"}`}>
+                        FACT CRITIC: {tailoredApp.critic_passed ? "PASSED" : "FAILED — MANUAL REVIEW REQUIRED"} (ATTEMPT {tailoredApp.critic_attempts}/3)
                       </span>
-                      <span className="text-xs text-emerald-700 dark:text-emerald-400">
-                        100% verified against original experience. Zero invented skills or credentials.
+                      <span className={`text-xs ${tailoredApp.critic_passed ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
+                        {tailoredApp.critic_passed
+                          ? "Verified against the complete candidate profile, including skills, letter, and email."
+                          : "This content is not verified and cannot be saved or exported automatically."}
                       </span>
                     </div>
                   </div>
                   <div className="text-right font-mono">
                     <span className="text-[10px] text-slate-500 block">ATS MATCH DELTA:</span>
                     <div className="text-sm font-black text-slate-900 dark:text-slate-100">
-                      {tailoredApp.ats_score_before}% → <span className="text-emerald-600">{tailoredApp.ats_score_after}%</span>
+                      {tailoredApp.ats_score_before != null ? `${tailoredApp.ats_score_before}%` : "N/A"} →{" "}
+                      <span className="text-emerald-600">
+                        {tailoredApp.ats_score_after != null ? `${tailoredApp.ats_score_after}%` : "N/A"}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -1290,12 +1535,7 @@ export default function CareerCopilotApp() {
                       <h3 className="tag-mono text-xs font-bold text-slate-600 dark:text-slate-400 uppercase flex items-center gap-2">
                         <FileText className="w-4 h-4 text-indigo-600" /> Full Tailored Resume
                       </h3>
-                      <button
-                        onClick={() => handleDownloadCVDocx(tailoredApp.tailored_cv_data, activeCV?.parsed_profile?.contact_info?.name || "Candidate")}
-                        className="tag-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
-                      >
-                        <Download className="w-3.5 h-3.5" /> DOCX
-                      </button>
+                      <div className="flex items-center gap-3"><button onClick={() => copyTailoredCVText(tailoredApp.tailored_cv_data)} className="tag-mono text-xs font-bold text-[#176B61] hover:underline">Copy CV text</button><button onClick={() => handleDownloadCVDocx(tailoredApp.tailored_cv_data, activeCV?.parsed_profile?.contact_info?.name || "Candidate")} className="tag-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"><Download className="w-3.5 h-3.5" /> DOCX</button></div>
                     </div>
 
                     {tailoredApp.tailored_cv_data?.professional_summary && (
@@ -1348,12 +1588,7 @@ export default function CareerCopilotApp() {
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="tag-mono text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Cover Letter</h3>
-                        <button
-                          onClick={() => handleDownloadCoverLetterDocx(tailoredApp.cover_letter, selectedJob?.company || "Company", selectedJob?.title || "Role")}
-                          className="tag-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
-                        >
-                          <Download className="w-3.5 h-3.5" /> DOCX
-                        </button>
+                        <div className="flex items-center gap-3"><button onClick={() => navigator.clipboard.writeText(tailoredApp.cover_letter || "")} className="tag-mono text-xs font-bold text-[#176B61] hover:underline">Copy</button><button onClick={() => handleDownloadCoverLetterDocx(tailoredApp.cover_letter, selectedJob?.company || "Company", selectedJob?.title || "Role")} className="tag-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"><Download className="w-3.5 h-3.5" /> DOCX</button></div>
                       </div>
                       <textarea
                         value={tailoredApp.cover_letter}
@@ -1366,12 +1601,7 @@ export default function CareerCopilotApp() {
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="tag-mono text-xs font-bold text-slate-600 dark:text-slate-400 uppercase">Cold Outreach Email</h3>
-                        <button
-                          onClick={() => handleDownloadEmailTxt(tailoredApp.cold_email, selectedJob?.company || "Hiring_Manager")}
-                          className="tag-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"
-                        >
-                          <Download className="w-3.5 h-3.5" /> TXT
-                        </button>
+                        <div className="flex items-center gap-3"><button onClick={() => navigator.clipboard.writeText(tailoredApp.cold_email || "")} className="tag-mono text-xs font-bold text-[#176B61] hover:underline">Copy</button><button onClick={() => handleDownloadEmailTxt(tailoredApp.cold_email, selectedJob?.company || "Hiring_Manager")} className="tag-mono text-xs text-indigo-600 dark:text-indigo-400 font-bold hover:underline flex items-center gap-1"><Download className="w-3.5 h-3.5" /> TXT</button></div>
                       </div>
                       <textarea
                         value={tailoredApp.cold_email}
@@ -1652,7 +1882,7 @@ export default function CareerCopilotApp() {
                 [MODULE // 06: CAREER ROADMAP ASSISTANT]
               </span>
               <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white mt-1">
-                Feasibility-Verified Learning Architecture
+                Adaptive career strategy and learning roadmap
               </h2>
             </div>
 
@@ -1710,6 +1940,13 @@ export default function CareerCopilotApp() {
                           ))}
                         </div>
                       )}
+                      {msg.suggestedReplies?.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+                          {msg.suggestedReplies.map((reply: string) => (
+                            <button key={reply} onClick={() => setRoadmapInput(reply)} className="rounded-full border border-[#9ACFC4] bg-[#EDF8F5] px-3 py-1.5 text-[10px] font-bold text-[#176B61] hover:bg-[#DDF2EA]">{reply}</button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1728,7 +1965,7 @@ export default function CareerCopilotApp() {
                   type="text"
                   value={roadmapInput}
                   onChange={(e) => setRoadmapInput(e.target.value)}
-                  placeholder="e.g. 'I want to be an AI Engineer in 6 months, studying 12 hours a week'..."
+                  placeholder="Try: 'I want a job in UAE' or 'Help me become an AI Engineer'..."
                   className="flex-1 text-xs px-3.5 py-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
                 <button
@@ -1901,11 +2138,15 @@ export default function CareerCopilotApp() {
                   <span className="tag-mono text-[9px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase font-bold border border-slate-200 dark:border-slate-700">
                     {selectedMatcherJob.source ? `[${selectedMatcherJob.source.toUpperCase()}]` : "[RADAR]"}
                   </span>
-                  {selectedMatcherJob.match_score !== undefined && (
+                  {selectedMatcherJob.match_score != null ? (
                     <span className="tag-mono text-[10px] px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-bold border border-indigo-200 dark:border-indigo-800">
                       {selectedMatcherJob.match_score}% Match
                     </span>
-                  )}
+                  ) : selectedMatcherJob.score_available === false ? (
+                    <span className="tag-mono text-[10px] px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-300 font-bold border border-amber-200 dark:border-amber-800">
+                      Match unavailable
+                    </span>
+                  ) : null}
                 </div>
                 <span className="tag-mono text-xs text-slate-500 flex items-center gap-1 mt-1">
                   <Building className="w-3.5 h-3.5" /> {selectedMatcherJob.company} • <MapPin className="w-3.5 h-3.5" /> {selectedMatcherJob.location || "Egypt / MENA"}
@@ -1927,7 +2168,7 @@ export default function CareerCopilotApp() {
                     5-Factor Target Match Model
                   </span>
                   <span className="tag-mono text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
-                    Tier: {selectedMatcherJob.rating_tier || "Standard"}
+                    Tier: {selectedMatcherJob.rating_tier || "Standard"} • Confidence: {selectedMatcherJob.score_confidence || "Unknown"}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
@@ -1940,7 +2181,9 @@ export default function CareerCopilotApp() {
                   ].map((sub, idx) => (
                     <div key={idx} className="p-2 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center">
                       <span className="tag-mono text-[8px] text-slate-500 uppercase block">{sub.label} ({sub.weight})</span>
-                      <span className="text-xs font-bold font-mono text-slate-900 dark:text-slate-100">{sub.val}%</span>
+                      <span className="text-xs font-bold font-mono text-slate-900 dark:text-slate-100">
+                        {sub.val == null ? "N/A" : `${sub.val}%`}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -1963,7 +2206,7 @@ export default function CareerCopilotApp() {
                     rel="noopener noreferrer"
                     className="px-3 py-1.5 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 font-bold shadow-sm"
                   >
-                    <ExternalLink className="w-3.5 h-3.5 text-indigo-600" /> Apply Link ↗
+                    <ExternalLink className="w-3.5 h-3.5 text-indigo-600" /> Open original job posting ↗
                   </a>
                 )}
               </div>

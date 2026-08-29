@@ -133,10 +133,12 @@ class CVAnalysisAgent:
             },
             "professional_summary": lines[1] if len(lines) > 1 else "",
             "sections_present": sections_present,
-            "experience": [{"title": "Engineering Experience", "company": "Tech Org", "bullets": bullets}],
+            # Do not manufacture roles, employers, education, or default skills when
+            # structured extraction is unavailable. Unknown facts must remain unknown.
+            "experience": [],
             "experience_bullets": bullets,
-            "education": [{"degree": "Bachelor Degree", "institution": "University", "year": ""}],
-            "skills_inventory": found_skills or ["Python", "Machine Learning", "Git"],
+            "education": [],
+            "skills_inventory": found_skills,
             "certifications": [],
         }
 

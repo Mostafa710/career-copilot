@@ -56,7 +56,9 @@ Compare the Tailored Application against the Candidate's Original CV.
 Verify that:
 1. The tailored experience and summary do NOT invent technologies, tools, or metrics that were absent from the original CV.
 2. The candidate's job titles and company names remain strictly accurate.
-3. The cover letter does not claim unverified degrees or credentials.
+3. Highlighted skills contain only skills supported by the original CV.
+4. The cover letter does not claim unverified degrees, credentials, employers, metrics, or responsibilities.
+5. The cold outreach email does not contain unsupported skills, achievements, credentials, or metrics.
 
 Output 'passed: true' ONLY if it is 100% truthful to the original CV.
 """),
@@ -65,10 +67,14 @@ Output 'passed: true' ONLY if it is 100% truthful to the original CV.
 
 Generated Tailored Summary & Experience:
 Summary: {tailored_summary}
+Highlighted Skills: {highlighted_skills}
 Experience: {tailored_experience}
 
 Generated Cover Letter:
 {cover_letter}
+
+Generated Cold Outreach Email:
+{cold_email}
 """)
 ])
 
@@ -127,10 +133,12 @@ class ApplicationTailorAgent:
             critic_chain = CRITIC_PROMPT | structured_critic
 
             evaluation: CriticEvaluation = await critic_chain.ainvoke({
-                "original_cv": f"Skills: {', '.join(candidate_skills)}\nExperience: {str(candidate_exp)}",
+                "original_cv": str(parsed_cv),
                 "tailored_summary": generated.tailored_professional_summary,
+                "highlighted_skills": ", ".join(generated.highlighted_skills),
                 "tailored_experience": str(generated.tailored_experience),
                 "cover_letter": generated.cover_letter,
+                "cold_email": generated.cold_email,
             })
 
             if evaluation.passed:
@@ -180,11 +188,14 @@ class ApplicationTailorAgent:
             "cover_letter": last_generated.cover_letter if last_generated else "",
             "cold_email": last_generated.cold_email if last_generated else "",
             "ats_score_before": original_match["match_score"],
-            "ats_score_after": max(tailored_match["match_score"], original_match["match_score"]),
+            "ats_score_after": tailored_match["match_score"],
             "match_details_before": original_match,
             "match_details_after": tailored_match,
             "critic_attempts": attempt,
-            "critic_passed": evaluation.passed if 'evaluation' in locals() else True,
+            "critic_passed": evaluation.passed if 'evaluation' in locals() else False,
+            "critic_feedback": evaluation.feedback if 'evaluation' in locals() else "Fact verification did not complete.",
+            "hallucinations_found": evaluation.hallucinations_found if 'evaluation' in locals() else [],
+            "export_allowed": evaluation.passed if 'evaluation' in locals() else False,
         }
 
 

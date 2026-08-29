@@ -21,37 +21,41 @@ class StorageService:
         self.resumes_dir.mkdir(parents=True, exist_ok=True)
         self.exports_dir.mkdir(parents=True, exist_ok=True)
 
-    def save_active_cv(
+    def save_cv_version(
         self,
         user_id: uuid.UUID,
+        version_id: uuid.UUID,
         filename: str,
         content: bytes,
     ) -> Tuple[str, str]:
-        """
-        Save the new active CV and delete previous stored files for this user.
-        Returns (storage_key, filename).
-        """
+        """Save an immutable CV file without deleting previous versions."""
         user_folder = self.resumes_dir / str(user_id)
         user_folder.mkdir(parents=True, exist_ok=True)
 
-        # Single Active CV Policy: Delete any previous files in user folder
-        for existing_file in user_folder.glob("*"):
-            try:
-                if existing_file.is_file():
-                    existing_file.unlink()
-                    logger.info(f"Deleted old resume file: {existing_file.name}")
-            except Exception as e:
-                logger.warning(f"Error removing old CV file {existing_file}: {e}")
-
-        # Save new file
-        safe_filename = filename.replace(" ", "_")
-        target_path = user_folder / safe_filename
+        safe_filename = Path(filename).name.replace(" ", "_")
+        target_path = user_folder / f"{version_id}_{safe_filename}"
         with open(target_path, "wb") as f:
             f.write(content)
 
         storage_key = str(target_path)
-        logger.info(f"Saved new active CV: {storage_key}")
+        logger.info(f"Saved CV version: {storage_key}")
         return storage_key, safe_filename
+
+    def delete_cv_version_file(self, storage_key: Optional[str]) -> bool:
+        """Delete one version file only when it resolves inside the resumes directory."""
+        if not storage_key:
+            return False
+        try:
+            target = Path(storage_key).resolve()
+            resumes_root = self.resumes_dir.resolve()
+            target.relative_to(resumes_root)
+            if target.is_file():
+                target.unlink()
+                logger.info(f"Deleted retained CV version file: {target.name}")
+            return True
+        except (OSError, ValueError) as exc:
+            logger.warning(f"Refused or failed to delete CV version file {storage_key}: {exc}")
+            return False
 
     def delete_user_files(self, user_id: uuid.UUID) -> bool:
         """Completely purge all files for a user upon account deletion."""

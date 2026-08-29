@@ -13,6 +13,16 @@ import math
 import re
 from typing import Dict, Any, List, Optional, Set, Tuple
 
+
+SCORING_ENGINE_VERSION = "2.0.0-phase0"
+MATCH_FACTOR_WEIGHTS: Dict[str, float] = {
+    "hard_skills": 0.40,
+    "semantic_nlp": 0.25,
+    "title_alignment": 0.15,
+    "experience_years": 0.10,
+    "soft_skills": 0.10,
+}
+
 # ------------------------------------------------------------------------------
 # 1. DICTIONARIES & TAXONOMIES
 # ------------------------------------------------------------------------------
@@ -339,6 +349,7 @@ def compute_general_ats_score(parsed_cv: Dict[str, Any], raw_text: str) -> Dict[
 
     return {
         "mode": "STANDALONE_HEALTH_SCORE",
+        "scoring_engine_version": SCORING_ENGINE_VERSION,
         "overall_score": composite_score,
         "rating_tier": rating_tier,
         "category_scores": {
@@ -377,10 +388,10 @@ def _skill_in_text(skill: str, text: str) -> bool:
     return bool(re.search(pattern, text, re.IGNORECASE))
 
 
-def _compute_cosine_sim(v1: Optional[List[float]], v2: Optional[List[float]]) -> float:
-    """Computes cosine similarity between two dense embedding vectors."""
+def _compute_cosine_sim(v1: Optional[List[float]], v2: Optional[List[float]]) -> Optional[float]:
+    """Computes cosine similarity, or returns None when either vector is unavailable."""
     if not v1 or not v2 or len(v1) != len(v2):
-        return 0.70  # Default neutral semantic similarity
+        return None
     dot = sum(a * b for a, b in zip(v1, v2))
     norm_a = math.sqrt(sum(a * a for a in v1))
     norm_b = math.sqrt(sum(b * b for b in v2))
@@ -389,10 +400,10 @@ def _compute_cosine_sim(v1: Optional[List[float]], v2: Optional[List[float]]) ->
     return max(0.0, min(1.0, dot / (norm_a * norm_b)))
 
 
-def _compute_ngram_sparse_score(cv_text: str, jd_text: str) -> float:
-    """Computes BM25/N-gram token overlap similarity (1-gram, 2-gram)."""
+def _compute_ngram_sparse_score(cv_text: str, jd_text: str) -> Optional[float]:
+    """Computes deterministic unique-token overlap for the available CV and JD text."""
     if not cv_text or not jd_text:
-        return 0.50
+        return None
 
     cv_words = set(re.findall(r"\b[a-zA-Z0-9\.\+#]+\b", cv_text.lower()))
     jd_words = set(re.findall(r"\b[a-zA-Z0-9\.\+#]+\b", jd_text.lower()))
@@ -403,7 +414,7 @@ def _compute_ngram_sparse_score(cv_text: str, jd_text: str) -> float:
     jd_clean = jd_words - stopwords
 
     if not jd_clean:
-        return 0.50
+        return None
 
     overlap = cv_clean.intersection(jd_clean)
     return max(0.0, min(1.0, len(overlap) / len(jd_clean)))
@@ -436,10 +447,6 @@ def compute_job_specific_ats_match(
     # ----------------------------------------------------
     # Sub-Metric A: Hard Skills & Technical Keywords (Weight: 40%)
     # ----------------------------------------------------
-    if not norm_job_skills:
-        # Fallback extract tech tokens from JD if empty
-        norm_job_skills = list(norm_cv_skills)[:10] if norm_cv_skills else ["python", "sql", "git"]
-
     total_jd_skill_weight = 0.0
     matched_skill_weight = 0.0
     matched_skills: List[str] = []
@@ -485,21 +492,29 @@ def compute_job_specific_ats_match(
         if not parent_matched:
             missing_skills.append(raw_s)
 
-    s_hard_skills = (matched_skill_weight / total_jd_skill_weight * 100.0) if total_jd_skill_weight > 0 else 75.0
-    s_hard_skills = min(100.0, max(0.0, s_hard_skills))
+    s_hard_skills: Optional[float] = None
+    if total_jd_skill_weight > 0:
+        s_hard_skills = min(100.0, max(0.0, matched_skill_weight / total_jd_skill_weight * 100.0))
 
     # ----------------------------------------------------
     # Sub-Metric B: Semantic Similarity via NLP (Weight: 25%)
     # ----------------------------------------------------
     cos_sim = _compute_cosine_sim(cv_embedding, job_embedding)
     sparse_sim = _compute_ngram_sparse_score(cv_full_text, job_description)
-    s_semantic_nlp = round((0.70 * cos_sim * 100.0) + (0.30 * sparse_sim * 100.0), 1)
-    s_semantic_nlp = min(100.0, max(0.0, s_semantic_nlp))
+    s_semantic_nlp: Optional[float] = None
+    if cos_sim is not None and sparse_sim is not None:
+        s_semantic_nlp = (0.70 * cos_sim * 100.0) + (0.30 * sparse_sim * 100.0)
+    elif cos_sim is not None:
+        s_semantic_nlp = cos_sim * 100.0
+    elif sparse_sim is not None:
+        s_semantic_nlp = sparse_sim * 100.0
+    if s_semantic_nlp is not None:
+        s_semantic_nlp = min(100.0, max(0.0, round(s_semantic_nlp, 1)))
 
     # ----------------------------------------------------
     # Sub-Metric C: Job Title & Seniority Alignment (Weight: 15%)
     # ----------------------------------------------------
-    s_title_align = 80.0  # Default lateral alignment
+    s_title_align: Optional[float] = None
     candidate_titles = []
     if cv_experience:
         for exp in cv_experience:
@@ -507,7 +522,7 @@ def compute_job_specific_ats_match(
             if t:
                 candidate_titles.append(t.lower())
 
-    if target_job_title:
+    if target_job_title and candidate_titles:
         target_t = target_job_title.lower()
         if any(target_t == ct for ct in candidate_titles):
             s_title_align = 100.0  # Exact Title Match
@@ -532,24 +547,17 @@ def compute_job_specific_ats_match(
     # ----------------------------------------------------
     # Extract required years from JD (e.g., "3+ years", "5 years of experience")
     req_years_match = re.search(r"\b(\d+)\+?\s*(?:-\s*\d+\s*)?(?:years?|yrs?)\b", jd_lower)
-    required_years = int(req_years_match.group(1)) if req_years_match else 2
+    required_years = int(req_years_match.group(1)) if req_years_match else None
 
-    candidate_total_years = len(cv_experience) * 1.5 if cv_experience else 2.0
-
-    if candidate_total_years >= required_years:
-        s_exp_years = 100.0
-    elif (required_years - candidate_total_years) <= 2:
-        s_exp_years = 70.0
-    else:
-        s_exp_years = 40.0
+    # Phase 0 deliberately leaves this factor unavailable until employment dates
+    # are normalized into a real, overlap-aware timeline. Position count is not years.
+    candidate_total_years: Optional[float] = None
+    s_exp_years: Optional[float] = None
 
     # ----------------------------------------------------
     # Sub-Metric E: Soft Skills & Competencies (Weight: 10%)
     # ----------------------------------------------------
     jd_soft_skills = [ss for ss in SOFT_SKILLS_TAXONOMY if ss in jd_lower]
-    if not jd_soft_skills:
-        jd_soft_skills = ["problem-solving", "collaboration", "communication"]
-
     matched_soft = []
     for ss in jd_soft_skills:
         if ss in cv_full_lower:
@@ -560,43 +568,114 @@ def compute_job_specific_ats_match(
         if all(any(p[:4] in token for token in cv_full_lower.split()) for p in parts):
             matched_soft.append(ss)
 
-    s_soft_skills = (len(matched_soft) / len(jd_soft_skills) * 100.0) if jd_soft_skills else 80.0
-    s_soft_skills = min(100.0, max(0.0, s_soft_skills))
+    s_soft_skills: Optional[float] = None
+    if jd_soft_skills:
+        s_soft_skills = min(100.0, max(0.0, len(matched_soft) / len(jd_soft_skills) * 100.0))
 
     # ----------------------------------------------------
     # Composite JD Target Match Score Calculation
     # ----------------------------------------------------
-    composite_match = round(
-        (0.40 * s_hard_skills) +
-        (0.25 * s_semantic_nlp) +
-        (0.15 * s_title_align) +
-        (0.10 * s_exp_years) +
-        (0.10 * s_soft_skills),
-        1
+    factor_scores: Dict[str, Optional[float]] = {
+        "hard_skills": s_hard_skills,
+        "semantic_nlp": s_semantic_nlp,
+        "title_alignment": s_title_align,
+        "experience_years": s_exp_years,
+        "soft_skills": s_soft_skills,
+    }
+    available_weight = sum(
+        MATCH_FACTOR_WEIGHTS[name]
+        for name, score in factor_scores.items()
+        if score is not None
     )
-    composite_match = min(100.0, max(0.0, composite_match))
-    rating_tier = map_rating_tier(composite_match)
+    if available_weight > 0:
+        composite_match: Optional[float] = round(
+            sum(
+                MATCH_FACTOR_WEIGHTS[name] * score
+                for name, score in factor_scores.items()
+                if score is not None
+            ) / available_weight,
+            1,
+        )
+        composite_match = min(100.0, max(0.0, composite_match))
+        rating_tier = map_rating_tier(composite_match)
+    else:
+        composite_match = None
+        rating_tier = "Unavailable"
+
+    factor_availability = {
+        "hard_skills": {
+            "available": s_hard_skills is not None,
+            "reason": None if s_hard_skills is not None else "No structured JD skills were extracted.",
+        },
+        "semantic_nlp": {
+            "available": s_semantic_nlp is not None,
+            "reason": None if s_semantic_nlp is not None else "CV or JD semantic text was unavailable.",
+        },
+        "title_alignment": {
+            "available": s_title_align is not None,
+            "reason": None if s_title_align is not None else "Candidate or target titles were unavailable.",
+        },
+        "experience_years": {
+            "available": False,
+            "reason": (
+                "The JD does not state a required number of years."
+                if required_years is None
+                else "Candidate employment dates have not been normalized into a reliable timeline."
+            ),
+        },
+        "soft_skills": {
+            "available": s_soft_skills is not None,
+            "reason": None if s_soft_skills is not None else "The JD did not state a recognized soft-skill requirement.",
+        },
+    }
+
+    effective_weights = {
+        name: round(MATCH_FACTOR_WEIGHTS[name] / available_weight, 4) if score is not None and available_weight else 0.0
+        for name, score in factor_scores.items()
+    }
+    if available_weight >= 0.80 and cos_sim is not None:
+        score_confidence = "High"
+    elif available_weight >= 0.50:
+        score_confidence = "Medium"
+    else:
+        score_confidence = "Low"
 
     actionable_recs = []
     if missing_skills:
         actionable_recs.append(f"Add critical missing technical skills to your CV: {', '.join(missing_skills[:4])}.")
-    if s_semantic_nlp < 70:
+    if s_semantic_nlp is not None and s_semantic_nlp < 70:
         actionable_recs.append("Incorporate more domain terminology and core verbs from the Job Description into your summary and project bullets.")
-    if s_hard_skills < 75:
+    if s_hard_skills is not None and s_hard_skills < 75:
         actionable_recs.append("Highlight hands-on tools and libraries that match required stack components.")
+    if s_hard_skills is None:
+        actionable_recs.append("The JD's technical requirements could not be extracted reliably; review them before trusting this match estimate.")
 
     return {
         "mode": "MATCH_SCORE",
+        "scoring_engine_version": SCORING_ENGINE_VERSION,
+        "score_available": composite_match is not None,
+        "score_confidence": score_confidence,
+        "available_weight": round(available_weight, 2),
         "match_score": composite_match,
         "overall_score": composite_match,
         "rating_tier": rating_tier,
         "match_level": rating_tier,
         "sub_scores": {
-            "hard_skills": round(s_hard_skills, 1),
-            "semantic_nlp": round(s_semantic_nlp, 1),
-            "title_alignment": round(s_title_align, 1),
-            "experience_years": round(s_exp_years, 1),
-            "soft_skills": round(s_soft_skills, 1),
+            "hard_skills": round(s_hard_skills, 1) if s_hard_skills is not None else None,
+            "semantic_nlp": round(s_semantic_nlp, 1) if s_semantic_nlp is not None else None,
+            "title_alignment": round(s_title_align, 1) if s_title_align is not None else None,
+            "experience_years": round(s_exp_years, 1) if s_exp_years is not None else None,
+            "soft_skills": round(s_soft_skills, 1) if s_soft_skills is not None else None,
+        },
+        "factor_availability": factor_availability,
+        "effective_weights": effective_weights,
+        "semantic_components": {
+            "cosine_similarity": round(cos_sim * 100.0, 1) if cos_sim is not None else None,
+            "token_overlap": round(sparse_sim * 100.0, 1) if sparse_sim is not None else None,
+        },
+        "experience_analysis": {
+            "required_years": required_years,
+            "candidate_total_years": candidate_total_years,
         },
         "keyword_analysis": {
             "matched_skills": sorted(list(set(matched_skills))),

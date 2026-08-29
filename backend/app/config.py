@@ -1,6 +1,7 @@
 """Configuration settings for Career Copilot backend."""
 
 from typing import Optional
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,6 +58,18 @@ class Settings(BaseSettings):
         "http://localhost:8000",
         "https://career-copilot.vercel.app",
     ]
+
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def normalize_debug_mode(cls, value):
+        """Accept common deployment labels without crashing boolean settings parsing."""
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "production", "prod"}:
+                return False
+            if normalized in {"development", "dev"}:
+                return True
+        return value
 
     model_config = SettingsConfigDict(
         env_file=".env",

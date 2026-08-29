@@ -32,16 +32,19 @@ async def chat_career_roadmap(
 ):
     """
     Interactive conversational career roadmap assistant.
-    Strictly restricted to career roadmaps and verifies weekly study hours before generating.
+    Uses the active CV and asks goal-specific follow-ups before generating a plan.
     """
     candidate_skills = []
+    candidate_profile = {}
     if user.profile and user.profile.parsed_data:
-        candidate_skills = user.profile.parsed_data.get("skills_inventory", [])
+        candidate_profile = user.profile.parsed_data
+        candidate_skills = candidate_profile.get("skills_inventory", [])
 
     result = await career_roadmap_agent.chat_roadmap(
         message=req.message,
         conversation_history=req.conversation_history or [],
         current_skills=candidate_skills,
+        candidate_profile=candidate_profile,
         max_attempts=3,
     )
 

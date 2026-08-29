@@ -96,7 +96,7 @@ flowchart TD
     
     Merge --> CheckCount{"Count >= 15 Jobs?"}
     CheckCount -->|Yes| StoreNewJobs["Upsert Delivered Jobs into jobs Table"]
-    CheckCount -->|No (< 15)| TavilyFallback["4. Tavily Live Web Search (site:linkedin.com OR site:wuzzuf.net)"] --> StoreNewJobs
+    CheckCount -->|"No (< 15)"| TavilyFallback["4. Tavily Live Web Search (site:linkedin.com OR site:wuzzuf.net)"] --> StoreNewJobs
     
     StoreNewJobs --> ReturnJobs["Return 15 to 20 Distinct Job Cards with Source Badges to UI"]
 ```

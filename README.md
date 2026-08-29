@@ -163,15 +163,12 @@ Run the full backend test suite:
 ```powershell
 uv run pytest
 ```
-* `test_wuzzuf_html_parsing`: **PASSED**
-* `test_bayt_html_parsing`: **PASSED**
-* `test_jsearch_normalization`: **PASSED**
-* `test_market_research_mena_aggregation`: **PASSED**
-* `test_general_ats_score_high_quality_cv`: **PASSED**
-* `test_general_ats_score_missing_contact_and_weak_verbs`: **PASSED**
-* `test_job_specific_ats_match`: **PASSED**
-* `test_sanitize_text`: **PASSED**
-* `test_parse_plain_text_cv`: **PASSED**
-* `test_real_cv_parsing_pdf`: **PASSED**
-* `test_real_cv_parsing_docx`: **PASSED**
-* `test_full_ats_audit_on_real_cv`: **PASSED**
+* `tests/test_ats_engine.py` (4 tests: high-quality CV, passive/buzzword deductions, 5-factor JD match, synonym/stack credit): **PASSED**
+* `tests/test_cv_parser.py` (2 tests: text sanitizer, plain text fallback): **PASSED**
+* `tests/test_cv_versions.py` (3 tests: immutable snapshots, 4-version rolling retention, pin protection): **PASSED**
+* `tests/test_mena_job_search.py` (4 tests: Wuzzuf HTML, Bayt HTML, JSearch RapidAPI, market aggregation): **PASSED**
+* `tests/test_phase0_safety.py` (5 tests: zero fake fallback facts, score transparency, critic safety): **PASSED**
+* `tests/test_real_cv.py` (3 tests: native PDF extraction, DOCX extraction, full LLM audit on real CV): **PASSED**
+* `tests/test_upgrade_v2.py` (4 tests: targeted CV review, quality gate, verified jobs, roadmap adaptation): **PASSED**
+
+**Result: 25 passed (100% test coverage across all agents and engines)**

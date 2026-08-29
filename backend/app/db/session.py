@@ -33,9 +33,24 @@ def init_db():
         # Import models so Base metadata is populated
         import backend.app.db.models  # noqa: F401
         Base.metadata.create_all(bind=engine)
-        # Compatibility migration for databases created before CV versioning.
+        # Compatibility migration for databases created before CV versioning / auth updates.
         # New tables are handled by create_all; existing tables need additive columns.
         with engine.begin() as connection:
+            connection.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS name VARCHAR(255) NULL"
+            ))
+            connection.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+            connection.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code VARCHAR(10) NULL"
+            ))
+            connection.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code_expires_at TIMESTAMPTZ NULL"
+            ))
+            connection.execute(text(
+                "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferences JSONB NOT NULL DEFAULT '{\"theme\":\"system\",\"default_country\":\"gb\",\"default_export_format\":\"pdf\",\"default_template\":\"modern\"}'::jsonb"
+            ))
             connection.execute(text(
                 "ALTER TABLE applications ADD COLUMN IF NOT EXISTS source_cv_version_id UUID NULL"
             ))

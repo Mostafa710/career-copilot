@@ -4,7 +4,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import pytest
 from backend.app.services.wuzzuf_scraper import wuzzuf_scraper
-from backend.app.services.bayt_scraper import bayt_scraper
 from backend.app.services.jsearch_client import jsearch_client
 from backend.app.agents.market_research import market_research_agent
 
@@ -33,48 +32,32 @@ SAMPLE_WUZZUF_HTML = """
 </html>
 """
 
-SAMPLE_BAYT_HTML = """
-<html>
-<body>
-    <ul>
-        <li class="has-pointer-d">
-            <h2 class="title"><a href="/en/egypt/jobs/backend-engineer-998877/">Backend Engineer (Python / Cloud)</a></h2>
-            <b class="company">Fawry Banking & Payment</b>
-            <span class="location">Cairo, Egypt</span>
-            <div class="jb-description">Design enterprise financial microservices and scalable APIs.</div>
-        </li>
-    </ul>
-</body>
-</html>
-"""
 
 SAMPLE_JSEARCH_DATA = [
     {
-        "job_id": "linkedin_98765",
+        "job_id": "linkedin_111",
         "job_title": "AI / ML Engineer",
         "employer_name": "Microsoft Egypt",
         "job_city": "Cairo",
-        "job_country": "Egypt",
-        "job_description": "Work on Azure AI models and generative intelligence pipelines.",
-        "job_apply_link": "https://www.linkedin.com/jobs/view/123456789",
+        "job_country": "EG",
+        "job_description": "Join Microsoft AI Hub in Cairo building PyTorch and LLM pipelines.",
+        "job_apply_link": "https://linkedin.com/jobs/view/111",
         "job_publisher": "LinkedIn",
         "job_required_skills": ["Python", "PyTorch", "Azure"],
-        "job_min_salary": 40000,
-        "job_max_salary": 70000,
+        "job_min_salary": 50000,
+        "job_max_salary": 80000,
     },
     {
-        "job_id": "indeed_54321",
+        "job_id": "indeed_222",
         "job_title": "DevOps Engineer",
         "employer_name": "Valu",
         "job_city": "Giza",
-        "job_country": "Egypt",
-        "job_description": "Manage Kubernetes clusters, Terraform infrastructure, and CI/CD pipelines.",
-        "job_apply_link": "https://eg.indeed.com/viewjob?jk=abcdef",
+        "job_country": "EG",
+        "job_description": "Valu fintech looking for Kubernetes and Terraform automation engineers.",
+        "job_apply_link": "https://indeed.com/viewjob?jk=222",
         "job_publisher": "Indeed",
-        "job_required_skills": ["Kubernetes", "Docker", "CI/CD"],
-        "job_min_salary": None,
-        "job_max_salary": None,
-    }
+        "job_required_skills": ["Docker", "Kubernetes", "AWS"],
+    },
 ]
 
 
@@ -91,20 +74,6 @@ def test_wuzzuf_html_parsing():
     assert j1["source"] == "wuzzuf"
     assert "Python" in j1["extracted_skills"]
     assert j1["content_hash"] is not None
-
-
-def test_bayt_html_parsing():
-    """Verify Bayt HTML parser extracts titles, companies, and apply URLs."""
-    jobs = bayt_scraper.parse_html(SAMPLE_BAYT_HTML)
-    assert len(jobs) == 1
-    
-    j = jobs[0]
-    assert "Backend Engineer" in j["title"]
-    assert "Fawry" in j["company"]
-    assert "Cairo" in j["location"]
-    assert "https://www.bayt.com/en/egypt/jobs" in j["redirect_url"]
-    assert j["source"] == "bayt"
-    assert j["content_hash"] is not None
 
 
 def test_jsearch_normalization():
@@ -128,12 +97,9 @@ def test_jsearch_normalization():
 
 @pytest.mark.asyncio
 async def test_market_research_mena_aggregation(monkeypatch):
-    """Verify market research agent aggregates Wuzzuf, Bayt, and JSearch concurrently."""
+    """Verify market research agent aggregates Wuzzuf and JSearch concurrently."""
     async def mock_wuzzuf(query, page=0):
         return wuzzuf_scraper.parse_html(SAMPLE_WUZZUF_HTML)
-
-    async def mock_bayt(query, country="egypt"):
-        return bayt_scraper.parse_html(SAMPLE_BAYT_HTML)
 
     async def mock_jsearch(query, location="Egypt", page=1, num_pages=1):
         return jsearch_client._normalize_jobs(SAMPLE_JSEARCH_DATA)
@@ -141,7 +107,6 @@ async def test_market_research_mena_aggregation(monkeypatch):
     from backend.app.services.tavily_client import tavily_client
 
     monkeypatch.setattr(wuzzuf_scraper, "search_jobs", mock_wuzzuf)
-    monkeypatch.setattr(bayt_scraper, "search_jobs", mock_bayt)
     monkeypatch.setattr(jsearch_client, "search_jobs", mock_jsearch)
     monkeypatch.setattr(tavily_client, "is_configured", lambda: False)
 
@@ -150,11 +115,10 @@ async def test_market_research_mena_aggregation(monkeypatch):
         user_preferences={"target_role": "Python Engineer", "default_country": "Egypt"},
     )
 
-    # With Tavily backfill disabled, exactly 2 (Wuzzuf) + 1 (Bayt) + 2 (JSearch) = 5 jobs
-    assert len(jobs) == 5
+    # With Tavily backfill disabled, exactly 2 (Wuzzuf) + 2 (JSearch) = 4 jobs
+    assert len(jobs) == 4
     sources = {j["source"] for j in jobs}
     assert "wuzzuf" in sources
-    assert "bayt" in sources
     assert "linkedin" in sources
     assert "indeed" in sources
 

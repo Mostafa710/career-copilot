@@ -1,4 +1,4 @@
-"""Market Research Agent: Multi-source Egypt & MENA job discovery (LinkedIn, Indeed, Wuzzuf, Bayt)."""
+"""Market Research Agent: Multi-source job discovery (RapidAPI JSearch, Wuzzuf, and Tavily)."""
 
 import asyncio
 import logging
@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 from backend.app.core.llm_factory import get_llm
 from backend.app.services.wuzzuf_scraper import wuzzuf_scraper
-from backend.app.services.bayt_scraper import bayt_scraper
 from backend.app.services.jsearch_client import jsearch_client
 from backend.app.services.tavily_client import tavily_client
 from backend.app.services.job_quality import keep_actual_job_postings
@@ -78,11 +77,10 @@ class MarketResearchAgent:
 
         logger.info(f"Market Research querying MENA sources: query='{search_query}', location='{location}'")
 
-        # 1. Execute concurrent multi-source job fetch (RapidAPI JSearch first, then Wuzzuf & Bayt)
+        # 1. Execute concurrent multi-source job fetch (RapidAPI JSearch first, then Wuzzuf)
         tasks = [
             jsearch_client.search_jobs(query=search_query, location=location),
             wuzzuf_scraper.search_jobs(query=search_query),
-            bayt_scraper.search_jobs(query=search_query, country="egypt"),
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)

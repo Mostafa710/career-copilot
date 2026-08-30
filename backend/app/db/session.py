@@ -67,6 +67,21 @@ def init_db():
                 "FOREIGN KEY (source_cv_version_id) REFERENCES cv_versions(id) ON DELETE SET NULL; "
                 "EXCEPTION WHEN duplicate_object THEN NULL; END $$;"
             ))
+            connection.execute(text(
+                "ALTER TABLE jobs ALTER COLUMN external_id TYPE TEXT;"
+            ))
+            connection.execute(text(
+                "ALTER TABLE jobs ALTER COLUMN title TYPE TEXT;"
+            ))
+            connection.execute(text(
+                "ALTER TABLE jobs ALTER COLUMN company TYPE TEXT;"
+            ))
+            connection.execute(text(
+                "ALTER TABLE jobs ALTER COLUMN location TYPE TEXT;"
+            ))
+            connection.execute(text(
+                "ALTER TABLE jobs ALTER COLUMN redirect_url TYPE TEXT;"
+            ))
         _migrate_legacy_cv_profiles()
         logger.info("All database tables created successfully.")
     except Exception as e:

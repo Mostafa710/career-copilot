@@ -107,12 +107,12 @@ class Job(Base):
     __tablename__ = "jobs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    external_id = Column(String(255), unique=True, nullable=True, index=True)
+    external_id = Column(Text, unique=True, nullable=True, index=True)
     content_hash = Column(String(64), nullable=True, index=True)
     source = Column(String(50), default="adzuna")
-    title = Column(String(255), nullable=False)
-    company = Column(String(255), nullable=False)
-    location = Column(String(255), nullable=True)
+    title = Column(String(512), nullable=False)
+    company = Column(String(512), nullable=False)
+    location = Column(String(512), nullable=True)
     salary_min = Column(Float, nullable=True)
     salary_max = Column(Float, nullable=True)
     redirect_url = Column(Text, nullable=True)

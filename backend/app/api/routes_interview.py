@@ -79,6 +79,7 @@ async def start_interview_session(
         job_title=job_title,
         company_name=company_name,
         candidate_summary=candidate_summary,
+        job_description=job_desc,
         domain=req.domain,
         company_insights=company_insights,
     )

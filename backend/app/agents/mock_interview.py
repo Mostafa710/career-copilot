@@ -26,6 +26,31 @@ class FinalInterviewScorecard(BaseModel):
     hiring_recommendation: str = Field(..., description="Strong Hire, Hire, Leaning Hire, or Needs Improvement")
 
 
+OPENING_QUESTION_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", """You are an experienced, welcoming, and professional hiring manager at {company_name} conducting a {interview_type} mock interview for the {job_title} role.
+
+INTERVIEW CONTEXT:
+Target Job Description:
+{job_description}
+
+Company Insights & Culture:
+{company_insights}
+
+Candidate Profile & Skills:
+{candidate_summary}
+
+TASK:
+Craft a realistic, personalized, and engaging opening interview question (Turn 1).
+- If Technical Mode: Welcome the candidate to {company_name} for the {job_title} role. Referencing key technical requirements from the job description or their background (e.g. system architecture, frameworks, scalability, data pipelines), ask a focused, practical opening technical question about their hands-on design or problem-solving experience.
+- If Behavioral Mode: Welcome the candidate to {company_name}. Reference {company_name}'s values or the day-to-day collaborative environment of the {job_title} position, and ask a STAR-focused behavioral question (Situation, Task, Action, Result) regarding real-world challenges (e.g., cross-functional leadership, resolving ambiguity, or recovering from setbacks).
+- If General Mode: Welcome the candidate and ask an insightful question exploring their domain focus and alignment with {job_title}.
+
+Keep the question concise, natural, and directly targeted to {job_title} at {company_name}. Do NOT output headers, bullets, or meta-commentary outside the interviewer's direct spoken message.
+"""),
+    ("human", "Generate the personalized opening question for Turn 1.")
+])
+
+
 TURN_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """You are an experienced, professional hiring manager conducting a realistic {interview_type} mock interview.
 
@@ -77,23 +102,45 @@ class MockInterviewAgent:
         job_title: str,
         company_name: str,
         candidate_summary: str,
+        job_description: Optional[str] = None,
         domain: Optional[str] = None,
         company_insights: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """Generate a personalized opening interview question."""
-        culture_note = ""
+        """Generate a personalized opening interview question dynamically tailored to the specific job and candidate."""
+        effective_title = domain if (interview_type.lower() == "general" and domain) else (job_title or "Software Engineer")
+        effective_company = company_name or "Target Company"
+        effective_desc = job_description or f"Core competencies, system architecture, and responsibilities for {effective_title}."
+        
+        insights_str = "None specified"
         if company_insights:
-            culture_vals = company_insights.get("culture_values", [])
-            if culture_vals:
-                culture_note = f" (focusing on our values of {', '.join(culture_vals[:2])})"
+            culture = company_insights.get("culture_values", [])
+            tech_stack = company_insights.get("tech_stack", [])
+            summary = company_insights.get("summary", "")
+            insights_str = f"Culture: {', '.join(culture)}. Tech Stack: {', '.join(tech_stack)}. Overview: {summary}"
 
+        try:
+            chain = OPENING_QUESTION_PROMPT | self.llm
+            res = await chain.ainvoke({
+                "interview_type": interview_type,
+                "job_title": effective_title,
+                "company_name": effective_company,
+                "job_description": effective_desc,
+                "company_insights": insights_str,
+                "candidate_summary": candidate_summary or "Experienced technical professional",
+            })
+            content = res.content if hasattr(res, "content") else str(res)
+            if content and len(content.strip()) > 20:
+                return content.strip()
+        except Exception as e:
+            logger.warning(f"Dynamic opening question generation fallback: {e}")
+
+        # Fallback if LLM is unavailable
         if interview_type.lower() == "behavioral":
-            return f"Welcome! We're conducting a behavioral interview for the {job_title} role at {company_name}{culture_note}. To begin, could you tell me about a high-stakes project from your past experience where you had to overcome a major unexpected obstacle, and walk me through your actions and the outcome?"
+            return f"Welcome! We're conducting a behavioral interview for the {effective_title} role at {effective_company}. To begin, could you tell me about a high-stakes project from your past experience where you had to overcome a major unexpected obstacle, and walk me through your actions and the outcome?"
         elif interview_type.lower() == "technical":
-            return f"Hello! We're excited to dive into your technical background for the {job_title} position at {company_name}. Could you walk me through the architecture of a complex system or technical project you built, explaining the core technologies you selected and the key engineering tradeoffs you made?"
+            return f"Hello! We're excited to dive into your technical background for the {effective_title} position at {effective_company}. Could you walk me through the architecture of a complex system or technical project you built, explaining the core technologies you selected and the key engineering tradeoffs you made?"
         else:
-            focus = domain or job_title
-            return f"Hi! Welcome to your {focus} interview. Could you introduce yourself, highlight your core background in {focus}, and share what challenges you're most excited to tackle in this domain?"
+            return f"Hi! Welcome to your {effective_title} interview. Could you introduce yourself, highlight your core background in {effective_title}, and share what challenges you're most excited to tackle in this domain?"
 
     async def evaluate_turn(
         self,

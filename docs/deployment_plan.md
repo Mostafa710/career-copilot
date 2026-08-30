@@ -50,7 +50,7 @@ flowchart TD
 | Component | AWS Service / Tool | Configuration & Role | Free Tier Coverage |
 | :--- | :--- | :--- | :--- |
 | **Infrastructure as Code** | **AWS CloudFormation** | Declarative YAML/JSON stack provisioning the entire VPC, ALB, ASG, RDS, and IAM. | **100% Free** (Zero AWS charge for stack orchestration) |
-| **Secret Management** | **AWS SSM Parameter Store** | Securely inject API keys (OpenAI, Adzuna, Tavily, LangSmith, DB URLs) into EC2 workers. | **100% Free** (Standard parameters are free) |
+| **Secret Management** | **AWS SSM Parameter Store** | Securely inject API keys (Groq GROQ_API_KEY_1..4, RapidAPI, Tavily, LangSmith, DB URLs) into EC2 workers. | **100% Free** (Standard parameters are free) |
 | **Frontend Hosting** | **Vercel** | Next.js App Router edge hosting + automated preview deployments. | **100% Free** (Hobby Plan) |
 | **SSL & Load Balancer** | **AWS ACM + ALB** | Port 443 HTTPS listener with free AWS Certificate Manager SSL certificate. | ACM is free; ALB covered in 750 free hrs/mo |
 | **Compute & Auto-Scaling** | **AWS EC2 (ASG)** | Auto-Scaling Group (`t4g.small` or `t3.micro`) running Dockerized FastAPI. | 750 free hours/month |

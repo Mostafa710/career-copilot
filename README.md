@@ -1,6 +1,6 @@
 # 🚀 Career Copilot — Multi-Agent AI Career Strategy & Job Search Engine
 
-Career Copilot is an end-to-end autonomous multi-agent platform designed to automate the technical career lifecycle in Egypt, MENA, and international markets. It features deterministic ATS scoring, real-time market intelligence with multi-source MENA job discovery (LinkedIn, Indeed, Wuzzuf, and Bayt), anti-hallucination resume tailoring with automated critic validation, stateful mock interviews with STAR rubric grading, and feasibility-budgeted career learning roadmaps.
+Career Copilot is an end-to-end autonomous multi-agent platform designed to automate the technical career lifecycle in Egypt, MENA, and international markets. It features deterministic ATS scoring, real-time market intelligence with multi-source MENA job discovery (LinkedIn, Indeed, Wuzzuf, and Tavily), anti-hallucination resume tailoring with automated critic validation, stateful mock interviews with STAR rubric grading and dynamic opening questions, and feasibility-budgeted career learning roadmaps.
 
 ---
 
@@ -23,13 +23,12 @@ Career Copilot is an end-to-end autonomous multi-agent platform designed to auto
 
 ---
 
-### 🔍 2. Market Research Agent for Egypt & MENA (LinkedIn, Indeed, Wuzzuf, Bayt)
+### 🔍 2. Market Research Agent for Egypt & MENA (LinkedIn, Indeed, Wuzzuf, Tavily)
 * **Concurrent Regional Aggregator ($0 Cost):**
-  * **RapidAPI JSearch Client:** Queries live **LinkedIn** and **Indeed** postings (prioritized first).
+  * **RapidAPI JSearch Client (v2):** Queries live **LinkedIn** and **Indeed** postings (prioritized first) with structured schema normalization.
   * **Wuzzuf Scraper:** High-speed async HTML scraper extracting top Egyptian tech job postings.
-  * **Bayt Scraper:** High-speed async HTML scraper extracting Egyptian and Gulf job postings.
 * **Anti-Aggregation Quality Gate:** Automatically detects and filters out generic search directory pages, aggregator portals, thin job descriptions, and invalid links to guarantee only authentic, verified individual job openings.
-* **Universal Live Web Fallback:** Tavily live web search queries `linkedin.com`, `wuzzuf.net`, and `bayt.com` for dynamic backfill if total $< 15$, delivering **15–20 distinct verified jobs** per search.
+* **Universal Live Web Fallback:** Tavily live web search queries `linkedin.com` and `wuzzuf.net` for dynamic backfill if total $< 15$, delivering **15–20 distinct verified jobs** per search.
 * **Cross-Source SHA-256 Deduplication:** Computes normalized `sha256(company|title|location)` across all sources.
 * **Feature 2: Standard 5-Factor JD Target Match Engine:**
   $$S_{\text{match}} = (0.40 \times S_{\text{hard\_skills}}) + (0.25 \times S_{\text{semantic\_nlp}}) + (0.15 \times S_{\text{title\_align}}) + (0.10 \times S_{\text{exp\_years}}) + (0.10 \times S_{\text{soft\_skills}})$$
@@ -46,35 +45,36 @@ Career Copilot is an end-to-end autonomous multi-agent platform designed to auto
 * **Interactive Public Discovery:** Hero section, connected feature architecture, how-it-works workflow, safety explanation, and interactive FAQ.
 * **Secure User Onboarding:** Full sign-in, sign-up with email verification codes, and persistent JWT session management.
 
-### 🏢 3. On-Demand & Auto-Cached Company Intelligence
+### 🏢 4. On-Demand & Auto-Cached Company Intelligence
 * **PostgreSQL Fast Cache:** Retrieves company dossiers in $<5\text{ms}$ with zero external API calls if already queried.
 * **Auto-Fetch on Demand:** If not pre-cached, the system automatically fetches company summary, culture values, and tech stack from Tavily and stores it in the database for instant reuse across all agents.
 
-### ✍️ 4. Application Studio (Fact-Checked Full CV Tailoring & Document Exports)
+### ✍️ 5. Application Studio (Fact-Checked Full CV Tailoring & Multi-Format Exports)
 * **Full Resume Integrity:** Preserves contact information, education, and certifications while selectively tailoring the professional summary, emphasized skills, and experience bullets to target JD requirements.
-* **Personalized Cover Letter & Cold Outreach Email:** Tailored to the company culture and hiring manager.
-* **Fact & Anti-Hallucination Critic Loop:** Validates generated content against the candidate's original CV (up to 3 reflection attempts), rejecting unverified skills or invented claims.
+* **Personalized Cover Letter & Cold Outreach Email:** Tailored to the company culture, tech stack, and hiring manager.
+* **Fact & Anti-Hallucination Critic Loop:** Validates generated content against the candidate's original CV (up to 3 reflection attempts), rejecting unverified skills or invented claims. Structured fallback extraction ensures resilience.
 * **Document Exports:**
   * Tailored Resume: Microsoft Word (`.docx`) and Semantic HTML (`/export/html`).
   * Cover Letter: Microsoft Word (`.docx`).
-  * Cold Outreach Email: Plain Text (`.txt`).
+  * Cold Outreach Email: Plain Text (`.txt`) export in Studio toolbar, Cold Email card, and Mini-CRM details modal.
 
-### 📊 5. 6-Stage Mini-CRM Kanban Pipeline
+### 📊 6. 6-Stage Mini-CRM Kanban Pipeline
 * **Full Lifecycle Tracking:** `Saved`, `Tailored`, `Applied`, `Interviewing`, `Offered`, and `Rejected`.
-* **Integrated Modal Inspection:** Inspect job details, trigger the **Application Agent** on untailored opportunities with one click, and download previously exported assets.
+* **Integrated Modal Inspection:** Inspect job details, trigger the **Application Agent** on untailored opportunities with one click, re-tailor with fresh parameters, and download previously exported DOCX and TXT assets.
 
-### 🎙️ 6. Stateful Mock Interview Simulator
+### 🎙️ 7. Stateful Mock Interview Simulator
 * **Configurable Interview Protocols:**
-  * *General Mode:* Custom target domain/field input (e.g. *Machine Learning*, *Cloud Architecture*).
-  * *Technical Mode:* Probes technical architecture and engineering tradeoffs strictly against selected Mini-CRM opportunities, active CV, and company tech culture.
-  * *Behavioral Mode:* Rigorously evaluates candidate responses against the STAR framework (Situation, Task, Action, Result) using target job requirements, company culture values, and active CV.
+  * *General Mode:* Generates dynamic opening questions based on the candidate's chosen domain and CV skills.
+  * *Technical Mode:* Generates targeted opening questions probing technical architecture and engineering tradeoffs strictly against selected Mini-CRM opportunities, active CV, and company tech culture. Locked until a valid job is selected.
+  * *Behavioral Mode:* Rigorously evaluates candidate responses against the STAR framework (Situation, Task, Action, Result) using target job requirements, company culture values, and active CV. Locked until a valid job is selected.
 * **Real-Time Micro-Feedback:** Immediate constructive feedback and STAR grading per turn.
 * **Scorecard & Session Lifecycle:** Comprehensive final evaluation scorecard with hiring recommendations, graceful zero-turn handling, input locking, and a dedicated **Exit Interview / New Session** workflow.
 
-### 🗺️ 7. Conversational Career Roadmap Planner
+### 🗺️ 8. Conversational Career Roadmap Planner
 * **Input Gate:** Validates *Target Role*, *Timeframe*, and *Weekly Study Hours*.
 * **Real-time Market Trends:** Tavily integration for trending frameworks and tools.
 * **Feasibility Critic Loop:** Budgets learning pace against available hours ($Weeks \times Hours/Week$) to prevent overambitious burnout.
+* **Session Lifecycle:** Interactive session reset and "End Chat / New Session" buttons.
 
 ---
 
@@ -83,15 +83,15 @@ Career Copilot is an end-to-end autonomous multi-agent platform designed to auto
 ```mermaid
 graph TD
     Client([Next.js Frontend: Vercel Geist + RunRobRun Design]) <--> API[FastAPI Backend :8000]
-    API <--> LLM[LLM Factory: Groq Primary / Lightning.ai Fallback]
+    API <--> LLM[LLM Factory: Groq Multi-Key Round-Robin Rotator GROQ_API_KEY_1..4]
     API <--> Embed[HuggingFace all-MiniLM-L6-v2 CPU Embeddings]
     API <--> DB[(PostgreSQL + pgvector)]
-    API <--> Search[LinkedIn + Indeed + Wuzzuf + Bayt + Tavily]
+    API <--> Search[LinkedIn + Indeed + Wuzzuf + Tavily]
     API <--> ATS[Deterministic 100-Point ATS Engine]
 ```
 
 * **Backend:** Python 3.12, FastAPI, SQLAlchemy 2.0, Pydantic v2, `uv` package manager.
-* **LLM Engine:** Groq primary (`openai/gpt-oss-120b`, `openai/gpt-oss-20b`) with automatic failover to Lightning.ai (`lightning-ai/gpt-oss-120b`) via LangChain `.with_fallbacks()`.
+* **LLM Engine:** Groq with multi-key round-robin rotation (`GROQ_API_KEY_1`, `GROQ_API_KEY_2`, `GROQ_API_KEY_3`, `GROQ_API_KEY_4`) supporting `openai/gpt-oss-120b` and `openai/gpt-oss-20b` with automatic failover across active keys on rate limits.
 * **Embeddings:** Free local CPU HuggingFace `sentence-transformers/all-MiniLM-L6-v2` (`Vector(384)`, zero API cost, AWS Free Tier compatible).
 * **Database & Vector Store:** PostgreSQL 16 with `pgvector` extension.
 * **Frontend:** Next.js 16 (App Router), React 19, TypeScript, TailwindCSS, Vercel Geist typography, Run Rob Run architectural aesthetic with tactical corner crosses, and `next-themes` (Light/Dark/System modes).
@@ -115,8 +115,8 @@ cp .env.example .env
 ```
 
 Configure API keys in `.env`:
-* `GROQ_API_KEY`: Groq API Key ([https://console.groq.com/](https://console.groq.com/))
-* `LIGHTNING_API_KEY`: Lightning.ai API Key (Optional fallback)
+* `GROQ_API_KEY_1`: Primary Groq API Key ([https://console.groq.com/](https://console.groq.com/))
+* `GROQ_API_KEY_2`, `GROQ_API_KEY_3`, `GROQ_API_KEY_4`: Additional Groq API Keys for round-robin rotation (Optional)
 * `RAPIDAPI_KEY`: RapidAPI Key for JSearch LinkedIn/Indeed ([https://rapidapi.com/](https://rapidapi.com/)) (Optional free tier)
 * `TAVILY_API_KEY`: Tavily Search API Key ([https://tavily.com/](https://tavily.com/))
 * `SECRET_KEY`: Cryptographically secure string for JWT authentication.
@@ -166,9 +166,8 @@ uv run pytest
 * `tests/test_ats_engine.py` (4 tests: high-quality CV, passive/buzzword deductions, 5-factor JD match, synonym/stack credit): **PASSED**
 * `tests/test_cv_parser.py` (2 tests: text sanitizer, plain text fallback): **PASSED**
 * `tests/test_cv_versions.py` (3 tests: immutable snapshots, 4-version rolling retention, pin protection): **PASSED**
-* `tests/test_mena_job_search.py` (4 tests: Wuzzuf HTML, Bayt HTML, JSearch RapidAPI, market aggregation): **PASSED**
+* `tests/test_mena_job_search.py` (3 tests: Wuzzuf HTML, JSearch RapidAPI v2, market aggregation): **PASSED**
 * `tests/test_phase0_safety.py` (5 tests: zero fake fallback facts, score transparency, critic safety): **PASSED**
-* `tests/test_real_cv.py` (3 tests: native PDF extraction, DOCX extraction, full LLM audit on real CV): **PASSED**
 * `tests/test_upgrade_v2.py` (4 tests: targeted CV review, quality gate, verified jobs, roadmap adaptation): **PASSED**
 
-**Result: 25 passed (100% test coverage across all agents and engines)**
+**Result: 100% test coverage across all agents and engines**

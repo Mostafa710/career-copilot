@@ -175,12 +175,12 @@ CREATE TABLE cv_versions (
 ```sql
 CREATE TABLE jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    external_id VARCHAR(255) UNIQUE,
+    external_id TEXT UNIQUE,
     content_hash VARCHAR(64),
     source VARCHAR(50) DEFAULT 'adzuna',
-    title VARCHAR(255) NOT NULL,
-    company VARCHAR(255) NOT NULL,
-    location VARCHAR(255),
+    title VARCHAR(1024) NOT NULL,
+    company VARCHAR(1024) NOT NULL,
+    location VARCHAR(1024),
     salary_min NUMERIC,
     salary_max NUMERIC,
     redirect_url TEXT,

@@ -22,12 +22,16 @@ flowchart TD
         Auth_JWT["Stateless JWT Token Access & Role Permissions"]
     end
 
+    subgraph LLMLayer ["LLM Pool & Key Rotation"]
+        GroqRotator["Groq Multi-Key Rotator (GROQ_API_KEY_1..4) with Round-Robin & Failover"]
+    end
+
     subgraph AgentsLayer ["Autonomous Agents & Core Engines"]
         Agent_CV["01: CV Diagnostics & Ingestion Engine (pdfplumber + pytesseract OCR)"]
         ATS_Gen["01: 100-Point Deterministic ATS Engine (5 Weighted Sub-Metrics + Tier Badges)"]
-        Agent_MR["02: Market Research Agent (RapidAPI JSearch + Wuzzuf + Bayt + Tavily SERP)"]
+        Agent_MR["02: Market Research Agent (RapidAPI JSearch v2 + Wuzzuf + Tavily SERP)"]
         Agent_JM["02: Job Matching & Fit Engine (Standardized 5-Factor JD Match Model)"]
-        Agent_APP["03: Multi-Agent Application Studio (Dual-Pass Fact Critic Loop + DOCX Generator)"]
+        Agent_APP["03: Multi-Agent Application Studio (Dual-Pass Fact Critic Loop + DOCX/TXT Generator)"]
         Agent_CRM["04: 6-Stage Mini-CRM Kanban Pipeline (Saved → Offered/Rejected)"]
         Agent_INT["05: Stateful Mock Interview Simulator (General, Technical, Behavioral + STAR)"]
         Agent_CR["06: Career Strategy & Roadmap Coach (Conversational + Feasibility Critic)"]
@@ -36,6 +40,7 @@ flowchart TD
 
     FastApiServer --> SecurityLayer
     FastApiServer --> AgentsLayer
+    AgentsLayer <--> GroqRotator
     Agent_APP & Agent_INT & Agent_CR <--> Tool_Tavily
 ```
 
@@ -73,7 +78,7 @@ flowchart TD
 
 ---
 
-### Module 01: CV Diagnostics, Deterministic ATS Scoring & Single Active CV Policy
+### Module 01: CV Diagnostics, Deterministic ATS Scoring & Version Snapshots
 
 ```mermaid
 flowchart TD
@@ -87,8 +92,8 @@ flowchart TD
     IsEmpty -->|Yes| Sanitize
     IsEmpty -->|No or Scanned Image| OCR["Fallback: pytesseract OCR"] --> Sanitize
     
-    Sanitize --> DeleteOld["Purge Previous Disk Files & DB Profile Embeddings"]
-    DeleteOld --> SaveFile["Save New Active Resume File"]
+    Sanitize --> SaveVersion["Persist Version Snapshot (Rolling 4-Version History with Pinned Retention)"]
+    SaveVersion --> SaveFile["Save New Active Resume File"]
     
     Sanitize --> StructExt["Pydantic Structured Profile Extractor"]
     StructExt --> Vectorize["Generate Dense Vector Embedding (all-MiniLM-L6-v2, 384 dims)"]
@@ -99,42 +104,39 @@ flowchart TD
         GenATS --> C1["Parseability & Structural Integrity (30%)"]
         GenATS --> C2["Action Language & Power Verbs (25%)"]
         GenATS --> C3["Quantification Density (20%)"]
-        GenATS --> C4["Contact & Essential Hygiene (15%)"]
-        GenATS --> C5["Brevity, Length & Formatting (10%)"]
+        GenATS --> C4["Contact Hygiene & Section Completeness (15%)"]
+        GenATS --> C5["Brevity & Formatting Boundaries (10%)"]
     end
     
-    C1 & C2 & C3 & C4 & C5 --> SaveProfile["Upsert into user_profiles Table in PostgreSQL"]
-    Vectorize --> SaveProfile
-    SaveProfile --> ReturnGenReport["Return Profile & ATS Readiness Breakdown to UI"]
+    C1 & C2 & C3 & C4 & C5 --> FinalStandalone["Assign General ATS Health Score (0–100) & Tier Badge"]
 ```
 
 ---
 
-### Module 02: Market Research & 5-Factor Hybrid Job Matching Engine
+### Module 02: Market Research & 5-Factor Job Matching
 
 ```mermaid
 flowchart TD
-    UserQuery["User Search Query / Target Role"] --> CheckInput{"Explicit query or profile default?"}
+    SearchReq["User Triggers Job Search (Query, Location, Filters)"] --> CheckInput{"Query provided?"}
     
-    CheckInput -->|Explicit Query| UseExplicit["Extract explicit Role, Location, Skills"]
+    CheckInput -->|Explicit Query| UseExplicit["Use Query: e.g. Senior AI Engineer"]
     CheckInput -->|Default / Blank| Infill["Infill from User Preferences & Active CV Profile"]
     
     UseExplicit & Infill --> RunConcurrent["Run Prioritized Multi-Source Discovery Pipeline"]
     
     subgraph MENAPipeline ["Concurrent Multi-Source Ingestion Pipeline"]
-        RunConcurrent --> JSearch["1. RapidAPI JSearch: Live LinkedIn & Indeed Postings"]
+        RunConcurrent --> JSearch["1. RapidAPI JSearch v2: Live LinkedIn & Indeed Postings"]
         RunConcurrent --> Wuzzuf["2. Wuzzuf Scraper: Direct Egyptian Tech Postings"]
-        RunConcurrent --> Bayt["3. Bayt Scraper: Egypt & Gulf Postings"]
     end
     
-    JSearch & Wuzzuf & Bayt --> Merge["Merge & Deduplicate: SHA-256 Content Hash + Unique External ID"]
+    JSearch & Wuzzuf --> Merge["Merge & Deduplicate: SHA-256 Content Hash + Unique External ID"]
     
     Merge --> QualGate{"Anti-Aggregator Quality Gate (job_quality.py)"}
     QualGate -->|Reject Directory/Dead Links| Discard["Discard Non-Posting Results"]
     QualGate -->|Verified Individual Vacancy| CheckCount{"Count >= 15 Jobs?"}
     
     CheckCount -->|Yes| MatchPipeline["5-Factor Target Match Engine"]
-    CheckCount -->|"No (< 15)"| TavilyFallback["4. Tavily Live Search (site:linkedin.com/jobs OR site:wuzzuf.net)"] --> MatchPipeline
+    CheckCount -->|"No (< 15)"| TavilyFallback["3. Tavily Live Search (site:linkedin.com/jobs OR site:wuzzuf.net)"] --> MatchPipeline
     
     subgraph Standard5Factor ["Standard 5-Factor Target Match Model"]
         MatchPipeline --> F1["Hard Skills & Keywords (40%): Canonical Tech Synonym Overlap"]
@@ -168,7 +170,7 @@ flowchart TD
         CriticNode -->|Fail: Invented unverified degree or skill| CheckAttempts{"Attempt < 3?"}
         
         CheckAttempts -->|Yes: Retry| IncrementAttempt["attempt += 1, pass Critic Feedback"] --> GenNode
-        CheckAttempts -->|No: Exhausted| CalcGap
+        CheckAttempts -->|No: Exhausted| Return422["Return 422: Fact-Check Unverified, purge studio state"]
     end
     
     CalcGap --> RenderStudio["Render Application Studio with Side-by-Side Editors & Save to CRM CTA"]
@@ -202,20 +204,21 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TD
-    Start["User Starts Mock Interview"] --> SelectMode{"Select Mode"}
+    Start["User Starts Mock Interview"] --> SelectMode{"Select Mode & Validate Selection"}
     
     SelectMode -->|General| InitGeneral["Load Custom User Domain (e.g. Machine Learning, Backend)"]
-    SelectMode -->|Technical| InitTech["Load Target Mini-CRM Job + Company Insights + Active CV"]
-    SelectMode -->|Behavioral| InitBehav["Load Target Mini-CRM Job + Company Culture Values + Active CV"]
+    SelectMode -->|Technical: Job Selected| InitTech["Load Target Mini-CRM Job + Company Insights + Active CV"]
+    SelectMode -->|Behavioral: Job Selected| InitBehav["Load Target Mini-CRM Job + Company Culture Values + Active CV"]
+    SelectMode -->|Technical/Behavioral: Empty Selection| LockButton["Lock 'Initialize Session' CTA Button"]
     
-    InitGeneral & InitTech & InitBehav --> QuestionLoop["Generate Question 1 of N"]
+    InitGeneral & InitTech & InitBehav --> DynamicQ1["AI Generates Dynamic Turn 1 Opening Question tailored to context"]
     
     subgraph InterviewLoop ["Multi-Turn Interview State Machine"]
-        QuestionLoop --> WaitAnswer["Wait for Candidate Answer (Input locked during evaluation)"]
+        DynamicQ1 --> WaitAnswer["Wait for Candidate Answer (Input locked during evaluation)"]
         WaitAnswer --> EvalResponse["Evaluate Response against Domain / JD / STAR Framework"]
         
         EvalResponse --> MicroFeedback["Generate Immediate Micro-Feedback & Rubric Ratings"]
-        MicroFeedback --> NextQ["Generate Contextual Follow-Up Question"] --> QuestionLoop
+        MicroFeedback --> NextQ["Generate Contextual Follow-Up Question"] --> WaitAnswer
     end
     
     InterviewLoop --> ConcludeAction["Candidate Clicks 'Conclude & Scorecard' or Completes Turns"]
@@ -253,5 +256,5 @@ flowchart TD
     end
     
     SaveRoadmap --> RenderRoadmap["Render 4-Phase Milestones with Concrete GitHub Portfolio Deliverables in Chat"]
+    RenderRoadmap --> ResetCTA["User can click 'End Chat / New Session' to Reset Chat State"]
 ```
-

@@ -737,10 +737,18 @@ export default function CareerCopilotApp() {
 
   // Mock Interview Handlers
   const handleStartInterview = async () => {
+    if ((interviewType === "Technical" || interviewType === "Behavioral") && !selectedInterviewJobId) {
+      alert("Please select a target job opportunity from your Mini-CRM pipeline.");
+      return;
+    }
+    if (interviewType === "General" && !interviewDomain.trim()) {
+      alert("Please enter a target interview domain or focus field.");
+      return;
+    }
     setInterviewLoading(true);
     try {
       const jobId = (interviewType === "Technical" || interviewType === "Behavioral")
-        ? (selectedInterviewJobId || selectedJob?.id || null)
+        ? selectedInterviewJobId
         : null;
 
       const res = await authFetch("/interview/start", {
@@ -2090,8 +2098,13 @@ export default function CareerCopilotApp() {
 
                 <button
                   onClick={handleStartInterview}
-                  disabled={interviewLoading}
-                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs sm:text-sm font-mono font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer"
+                  disabled={
+                    interviewLoading ||
+                    (interviewType === "General"
+                      ? !interviewDomain.trim()
+                      : !selectedInterviewJobId)
+                  }
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-mono font-bold rounded-xl shadow-md transition-all flex items-center justify-center gap-2.5 cursor-pointer"
                 >
                   {interviewLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Terminal className="w-5 h-5" />}
                   Initialize Interview Session →

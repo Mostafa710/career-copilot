@@ -89,6 +89,25 @@ Generated Cold Outreach Email:
 ])
 
 
+import json
+import re
+
+def _extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
+    if not text:
+        return None
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+    match = re.search(r"\{[\s\S]*\}", text)
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except Exception:
+            pass
+    return None
+
+
 class ApplicationTailorAgent:
     def __init__(self):
         self.generator_llm = get_llm(temperature=0.2)
@@ -133,6 +152,70 @@ class ApplicationTailorAgent:
             cold_email=cold_email,
         )
 
+    async def _generate_output(self, input_dict: Dict[str, Any]) -> Optional[TailoredApplicationOutput]:
+        try:
+            structured_gen = self.generator_llm.with_structured_output(TailoredApplicationOutput)
+            gen_chain = GENERATOR_PROMPT | structured_gen
+            return await gen_chain.ainvoke(input_dict)
+        except Exception as e:
+            err_str = str(e)
+            logger.warning(f"Structured generator tool-call failed ({e}), attempting fallback extraction...")
+            if "failed_generation" in err_str:
+                match = re.search(r'"arguments":\s*(\{[\s\S]*\}|"[^"]+")', err_str)
+                if match:
+                    raw_args = match.group(1)
+                    if raw_args.startswith('"') and raw_args.endswith('"'):
+                        try:
+                            raw_args = json.loads(raw_args)
+                        except Exception:
+                            pass
+                    parsed = _extract_json_from_text(raw_args) if isinstance(raw_args, str) else raw_args
+                    if isinstance(parsed, dict):
+                        return TailoredApplicationOutput(**parsed)
+            try:
+                raw_res = await (GENERATOR_PROMPT | self.generator_llm).ainvoke(input_dict)
+                content = raw_res.content if hasattr(raw_res, 'content') else str(raw_res)
+                parsed = _extract_json_from_text(content)
+                if isinstance(parsed, dict):
+                    return TailoredApplicationOutput(**parsed)
+            except Exception as direct_err:
+                logger.warning(f"Direct generator prompt fallback failed: {direct_err}")
+            return None
+
+    async def _evaluate_critic(self, input_dict: Dict[str, Any]) -> CriticEvaluation:
+        try:
+            structured_critic = self.critic_llm.with_structured_output(CriticEvaluation)
+            critic_chain = CRITIC_PROMPT | structured_critic
+            return await critic_chain.ainvoke(input_dict)
+        except Exception as e:
+            err_str = str(e)
+            logger.warning(f"Structured critic tool-call failed ({e}), attempting fallback extraction...")
+            if "failed_generation" in err_str:
+                match = re.search(r'"arguments":\s*(\{[\s\S]*\}|"[^"]+")', err_str)
+                if match:
+                    raw_args = match.group(1)
+                    if raw_args.startswith('"') and raw_args.endswith('"'):
+                        try:
+                            raw_args = json.loads(raw_args)
+                        except Exception:
+                            pass
+                    parsed = _extract_json_from_text(raw_args) if isinstance(raw_args, str) else raw_args
+                    if isinstance(parsed, dict):
+                        return CriticEvaluation(**parsed)
+            try:
+                raw_res = await (CRITIC_PROMPT | self.critic_llm).ainvoke(input_dict)
+                content = raw_res.content if hasattr(raw_res, 'content') else str(raw_res)
+                parsed = _extract_json_from_text(content)
+                if isinstance(parsed, dict):
+                    return CriticEvaluation(**parsed)
+            except Exception as direct_err:
+                logger.warning(f"Direct critic prompt fallback failed: {direct_err}")
+            return CriticEvaluation(
+                passed=False,
+                feedback="Automated fact verification encountered formatting anomaly.",
+                hallucinations_found=["Transient model formatting anomaly"],
+            )
+
     async def tailor_application(
         self,
         parsed_cv: Dict[str, Any],
@@ -156,58 +239,53 @@ class ApplicationTailorAgent:
 
         critic_feedback = ""
         last_generated: Optional[TailoredApplicationOutput] = None
+        final_evaluation: Optional[CriticEvaluation] = None
+        attempt_count = 0
 
         for attempt in range(1, max_attempts + 1):
+            attempt_count = attempt
             logger.info(f"Application Tailoring Attempt {attempt}/{max_attempts}")
 
             # 1. Generator Step
             prompt_feedback = f"\nCritic Feedback from previous attempt: {critic_feedback}\n" if critic_feedback else ""
-            structured_gen = self.generator_llm.with_structured_output(TailoredApplicationOutput)
-            gen_chain = GENERATOR_PROMPT | structured_gen
+            generated = await self._generate_output({
+                "candidate_skills": ", ".join(candidate_skills),
+                "candidate_experience": str(candidate_exp),
+                "candidate_education": str(candidate_edu),
+                "job_title": job_title,
+                "company_name": company_name,
+                "job_description": job_desc,
+                "company_insights": insights_str,
+                "critic_feedback": prompt_feedback,
+            })
 
-            try:
-                generated: TailoredApplicationOutput = await gen_chain.ainvoke({
-                    "candidate_skills": ", ".join(candidate_skills),
-                    "candidate_experience": str(candidate_exp),
-                    "candidate_education": str(candidate_edu),
-                    "job_title": job_title,
-                    "company_name": company_name,
-                    "job_description": job_desc,
-                    "company_insights": insights_str,
-                    "critic_feedback": prompt_feedback,
-                })
-                last_generated = generated
-            except Exception as gen_err:
-                logger.warning(f"Generator attempt {attempt} failed: {gen_err}")
+            if not generated:
+                logger.warning(f"Generator attempt {attempt} failed to produce output.")
                 if attempt == max_attempts and not last_generated:
                     last_generated = self._fallback_tailored_output(
                         candidate_skills, candidate_exp, job_title, company_name, job_desc
                     )
                 continue
 
+            last_generated = generated
+
             # 2. Critic Validation Step
-            try:
-                structured_critic = self.critic_llm.with_structured_output(CriticEvaluation)
-                critic_chain = CRITIC_PROMPT | structured_critic
+            evaluation = await self._evaluate_critic({
+                "original_cv": str(parsed_cv),
+                "tailored_summary": generated.tailored_professional_summary,
+                "highlighted_skills": ", ".join(generated.highlighted_skills or []),
+                "tailored_experience": str(generated.tailored_experience),
+                "cover_letter": generated.cover_letter,
+                "cold_email": generated.cold_email,
+            })
+            final_evaluation = evaluation
 
-                evaluation: CriticEvaluation = await critic_chain.ainvoke({
-                    "original_cv": str(parsed_cv),
-                    "tailored_summary": generated.tailored_professional_summary,
-                    "highlighted_skills": ", ".join(generated.highlighted_skills or []),
-                    "tailored_experience": str(generated.tailored_experience),
-                    "cover_letter": generated.cover_letter,
-                    "cold_email": generated.cold_email,
-                })
-
-                if evaluation.passed:
-                    logger.info(f"Fact Critic PASSED on attempt {attempt}.")
-                    break
-                else:
-                    logger.warning(f"Fact Critic REJECTED on attempt {attempt}: {evaluation.feedback}")
-                    critic_feedback = f"Fix hallucinations: {', '.join(evaluation.hallucinations_found or [])}. {evaluation.feedback}"
-            except Exception as critic_err:
-                logger.warning(f"Critic evaluation encountered error (proceeding with generation): {critic_err}")
+            if evaluation.passed:
+                logger.info(f"Fact Critic PASSED on attempt {attempt}.")
                 break
+            else:
+                logger.warning(f"Fact Critic REJECTED on attempt {attempt}: {evaluation.feedback}")
+                critic_feedback = f"Fix hallucinations: {', '.join(evaluation.hallucinations_found or [])}. {evaluation.feedback}"
 
         if not last_generated:
             last_generated = self._fallback_tailored_output(
@@ -249,6 +327,8 @@ class ApplicationTailorAgent:
             "certifications": candidate_certs,
         }
 
+        critic_passed = final_evaluation.passed if final_evaluation else False
+
         return {
             "tailored_cv_data": full_tailored_cv,
             "cover_letter": last_generated.cover_letter if last_generated else "",
@@ -257,11 +337,11 @@ class ApplicationTailorAgent:
             "ats_score_after": tailored_match["match_score"],
             "match_details_before": original_match,
             "match_details_after": tailored_match,
-            "critic_attempts": attempt,
-            "critic_passed": evaluation.passed if 'evaluation' in locals() else False,
-            "critic_feedback": evaluation.feedback if 'evaluation' in locals() else "Fact verification did not complete.",
-            "hallucinations_found": evaluation.hallucinations_found if 'evaluation' in locals() else [],
-            "export_allowed": evaluation.passed if 'evaluation' in locals() else False,
+            "critic_attempts": attempt_count,
+            "critic_passed": critic_passed,
+            "critic_feedback": final_evaluation.feedback if final_evaluation else "Fact verification did not complete.",
+            "hallucinations_found": final_evaluation.hallucinations_found if final_evaluation else [],
+            "export_allowed": critic_passed,
         }
 
 

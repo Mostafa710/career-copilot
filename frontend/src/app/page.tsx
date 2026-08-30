@@ -850,6 +850,22 @@ export default function CareerCopilotApp() {
   };
 
   // Conversational Roadmap Handler
+  const handleResetRoadmapChat = () => {
+    if (roadmapMessages.length > 1) {
+      if (!confirm("End this conversation and start a new roadmap session?")) {
+        return;
+      }
+    }
+    setRoadmapMessages([
+      {
+        role: "assistant",
+        content:
+          "Tell me what outcome you want. I can use your CV to plan a job search, relocation, career transition, or a learning roadmap—and I’ll ask only the next question that matters.",
+      },
+    ]);
+    setRoadmapInput("");
+  };
+
   const handleSendRoadmapMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roadmapInput.trim() || roadmapLoading) return;
@@ -2208,19 +2224,43 @@ export default function CareerCopilotApp() {
         {/* TAB 6: ROADMAP PLANNER */}
         {activeTab === "roadmap" && (
           <div className="space-y-8">
-            <div className="border-b border-slate-200 dark:border-slate-800 pb-6 space-y-2">
-              <span className="tag-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest block">
-                [MODULE // 06: CAREER STRATEGY & ROADMAP COACH]
-              </span>
-              <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 dark:text-white">
-                Conversational Career Strategy & Learning Roadmap
-              </h2>
-              <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400 font-normal leading-relaxed max-w-4xl">
-                Explore role transitions, international visa paths, salary benchmarks, and step-by-step milestone projects.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-200 dark:border-slate-800 pb-6 gap-4">
+              <div className="space-y-2">
+                <span className="tag-mono text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest block">
+                  [MODULE // 06: CAREER STRATEGY & ROADMAP COACH]
+                </span>
+                <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900 dark:text-white">
+                  Conversational Career Strategy & Learning Roadmap
+                </h2>
+                <p className="text-base sm:text-lg text-slate-600 dark:text-slate-400 font-normal leading-relaxed max-w-4xl">
+                  Explore role transitions, international visa paths, salary benchmarks, and step-by-step milestone projects.
+                </p>
+              </div>
+              <button
+                onClick={handleResetRoadmapChat}
+                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold font-mono text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 flex items-center gap-2 shadow-xs shrink-0 cursor-pointer self-start sm:self-center"
+                title="End current chat and start a new conversation"
+              >
+                <LogOut className="w-4 h-4 text-rose-500" /> End Chat / New Session
+              </button>
             </div>
 
             <div className="bento-card flex flex-col h-[750px] bg-white dark:bg-[#111827] border-slate-200 dark:border-slate-800 shadow-xl">
+              {/* Chat Session Top Bar */}
+              <div className="flex items-center justify-between px-6 py-3.5 border-b border-slate-200 dark:border-slate-800 font-mono text-xs text-slate-500 bg-slate-50/50 dark:bg-slate-950/50 rounded-t-2xl">
+                <span className="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-300">
+                  <Activity className="w-4 h-4 text-emerald-600" /> Interactive Career Coach
+                </span>
+                {roadmapMessages.length > 1 && (
+                  <button
+                    onClick={handleResetRoadmapChat}
+                    className="text-xs font-bold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" /> End Chat
+                  </button>
+                )}
+              </div>
+
               {/* Messages Feed */}
               <div className="flex-1 p-6 sm:p-8 overflow-y-auto space-y-5">
                 {roadmapMessages.map((msg, i) => (

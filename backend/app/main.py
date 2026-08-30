@@ -71,8 +71,8 @@ def health_check():
         "status": "healthy",
         "app": settings.APP_NAME,
         "environment": settings.APP_ENV,
-        "llm_primary": "Groq",
-        "llm_fallback": "Lightning.ai",
+        "llm_provider": "Groq (Multi-Key Rotation)",
+        "active_keys_count": len(settings.get_groq_api_keys()),
         "pgvector_ready": True,
     }
 

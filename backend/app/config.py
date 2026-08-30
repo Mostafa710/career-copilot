@@ -19,13 +19,21 @@ class Settings(BaseSettings):
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
 
-    # LLM Providers (Groq Primary, Lightning.ai Fallback)
-    GROQ_API_KEY: Optional[str] = None
+    # LLM Providers (Multi-Key Groq with Round-Robin Load Balancing)
+    GROQ_API_KEY_1: Optional[str] = None
+    GROQ_API_KEY_2: Optional[str] = None
+    GROQ_API_KEY_3: Optional[str] = None
+    GROQ_API_KEY_4: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None  # Backward compatibility alias for GROQ_API_KEY_1
     GROQ_MODEL: str = "openai/gpt-oss-120b"
-    
-    LIGHTNING_API_KEY: Optional[str] = None
-    LIGHTNING_BASE_URL: str = "https://lightning.ai/api/v1"
-    LIGHTNING_MODEL: str = "lightning-ai/gpt-oss-120b"
+
+    def get_groq_api_keys(self) -> list[str]:
+        """Collect all configured Groq API keys in order without duplicates."""
+        keys = []
+        for k in [self.GROQ_API_KEY_1, self.GROQ_API_KEY, self.GROQ_API_KEY_2, self.GROQ_API_KEY_3, self.GROQ_API_KEY_4]:
+            if k and k.strip() and not k.startswith("your_") and k not in keys:
+                keys.append(k.strip())
+        return keys
 
     # Embedding Model Settings (Free Local HuggingFace default, CPU-optimized for AWS Free Tier)
     EMBEDDING_PROVIDER: str = "huggingface"  # "huggingface" or "openai"

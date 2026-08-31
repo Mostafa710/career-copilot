@@ -58,6 +58,15 @@ async def search_jobs(
         ext_id = job_data.get("external_id")
         existing_db_job = db.query(Job).filter(Job.external_id == ext_id).first() if ext_id else None
 
+        posted_at_val = None
+        raw_posted = job_data.get("posted_at")
+        if raw_posted and isinstance(raw_posted, str):
+            try:
+                from datetime import datetime
+                posted_at_val = datetime.fromisoformat(raw_posted.replace("Z", "+00:00"))
+            except ValueError:
+                posted_at_val = None
+
         if not existing_db_job:
             db_job = Job(
                 external_id=ext_id,
@@ -71,6 +80,7 @@ async def search_jobs(
                 redirect_url=job_data.get("redirect_url"),
                 description=job_data.get("description", ""),
                 extracted_skills=job_data.get("extracted_skills"),
+                posted_at=posted_at_val,
             )
             db.add(db_job)
             db.commit()

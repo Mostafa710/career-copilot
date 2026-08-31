@@ -107,16 +107,20 @@ class TavilyClient:
 
     async def search_live_jobs(self, query: str, location: Optional[str] = "Egypt", max_results: int = 15) -> List[Dict[str, Any]]:
         """Fetch live direct vacancy postings from LinkedIn, Wuzzuf, and Bayt for any MENA location."""
+        import re
+        from backend.app.services.job_quality import is_specific_job_url, _CLOSED_OR_EXPIRED_PATTERNS, _AGGREGATOR_TITLE_PATTERNS
+
         if not self.is_configured():
             return []
 
-        # Target direct vacancy posting endpoints to avoid directory/search aggregate index pages
-        search_query = f'"{query}" (site:linkedin.com/jobs/view/ OR site:wuzzuf.net/jobs/p/ OR site:bayt.com/en/egypt/jobs/) {location or "Egypt"}'
+        # Target ONLY direct individual vacancy posting endpoints (singular /job/, /jobs/p/, /jobs/view/)
+        search_query = f'"{query}" (site:linkedin.com/jobs/view/ OR site:wuzzuf.net/jobs/p/ OR site:bayt.com/en/job/ OR site:bayt.com/en/egypt/job/) {location or "Egypt"} -closed -"no longer accepting applications" -intitle:"150" -intitle:"وظائف" -intitle:"شغل في"'
         payload = {
             "api_key": self.api_key,
             "query": search_query,
             "search_depth": "advanced",
             "max_results": max_results,
+            "days": 30,
         }
 
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -131,6 +135,17 @@ class TavilyClient:
                     title_raw = r.get("title", f"{query} Opening")
                     url = r.get("url", "")
                     desc = r.get("content", f"Open position for {query} in {location or 'Egypt'}.")
+
+                    # 1. Validate that the URL points to a specific job vacancy (not an open-link / category search)
+                    if not is_specific_job_url(url):
+                        continue
+
+                    # 2. Skip closed / aggregator jobs detected in snippet or title
+                    combined_check = f"{title_raw} {desc}"
+                    if any(re.search(p, combined_check, re.IGNORECASE) for p in _CLOSED_OR_EXPIRED_PATTERNS):
+                        continue
+                    if any(re.search(p, title_raw, re.IGNORECASE) for p in _AGGREGATOR_TITLE_PATTERNS):
+                        continue
 
                     # Smart Company & Title Extraction
                     company = "Identified Employer"
@@ -194,6 +209,8 @@ class TavilyClient:
                         "redirect_url": url,
                         "description": desc,
                         "extracted_skills": [],
+                        "is_active": True,
+                        "is_closed": False,
                     })
                 return parsed_jobs
             except Exception as e:

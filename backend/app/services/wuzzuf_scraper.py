@@ -44,12 +44,13 @@ class WuzzufScraper:
     ) -> List[Dict[str, Any]]:
         """
         Scrapes job listings from Wuzzuf for a given search query.
-        Returns a list of standardized job dictionaries.
+        Filters for postings within the last month to ensure open, active vacancies.
         """
         params = {
             "q": query,
             "a": "hpb",
             "start": page,
+            "filters[post_date][0]": "within_1_month",
         }
 
         try:
@@ -67,7 +68,7 @@ class WuzzufScraper:
             return []
 
     def parse_html(self, html_content: str) -> List[Dict[str, Any]]:
-        """Parses Wuzzuf search results HTML into structured job records."""
+        """Parses Wuzzuf search results HTML into structured job records, skipping closed vacancies."""
         soup = BeautifulSoup(html_content, "html.parser")
         jobs: List[Dict[str, Any]] = []
 
@@ -78,8 +79,19 @@ class WuzzufScraper:
         if not cards:
             cards = soup.find_all("div", attrs={"data-qa": "job-card"}) or soup.find_all("article")
 
+        closed_keywords = {"closed", "expired", "job closed", "job expired", "no longer accepting applications"}
+
         for card in cards:
             try:
+                # 0. Check for closed/expired badges or status text
+                card_text_lower = card.get_text(separator=" ", strip=True).lower()
+                if any(ck in card_text_lower for ck in ["job closed", "expired", "closed for applications", "no longer accepting"]):
+                    continue
+
+                status_badge = card.find(lambda el: el.name in ("span", "div", "strong", "badge") and el.get_text(strip=True).lower() in closed_keywords)
+                if status_badge:
+                    continue
+
                 # 1. Job Title & Link
                 title_elem = card.find("h2") or card.find("h3")
                 if not title_elem:
@@ -138,6 +150,8 @@ class WuzzufScraper:
                     "redirect_url": redirect_url,
                     "description": description,
                     "extracted_skills": skills,
+                    "is_active": True,
+                    "is_closed": False,
                 })
             except Exception as e:
                 logger.debug(f"Error parsing individual Wuzzuf card: {e}")

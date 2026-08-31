@@ -35,9 +35,11 @@ class JSearchClient:
         location: Optional[str] = "Egypt",
         page: int = 1,
         num_pages: int = 1,
+        date_posted: str = "month",
     ) -> List[Dict[str, Any]]:
         """
         Queries live LinkedIn and Indeed listings via RapidAPI JSearch.
+        Defaults to date_posted="month" to only retrieve active, open postings.
         """
         api_key = self.api_key
         if not api_key or api_key.startswith("your_"):
@@ -53,7 +55,7 @@ class JSearchClient:
             "query": search_query,
             "page": str(page),
             "num_pages": str(num_pages),
-            "date_posted": "all",
+            "date_posted": date_posted or "month",
         }
 
         endpoints = [
@@ -93,10 +95,35 @@ class JSearchClient:
             return []
 
     def _normalize_jobs(self, raw_jobs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Normalizes JSearch response objects to unified Career Copilot schema."""
+        """Normalizes JSearch response objects to unified Career Copilot schema with active status filtering."""
+        from datetime import datetime, timezone
+
         normalized: List[Dict[str, Any]] = []
+        now_utc = datetime.now(timezone.utc)
 
         for item in raw_jobs:
+            # 1. Skip explicitly closed or expired postings
+            if item.get("job_is_closed") is True or item.get("job_is_expired") is True:
+                continue
+
+            expiration_ts = item.get("job_offer_expiration_timestamp")
+            if expiration_ts:
+                try:
+                    exp_dt = datetime.fromtimestamp(float(expiration_ts), tz=timezone.utc)
+                    if exp_dt < now_utc:
+                        continue
+                except (ValueError, OSError, OverflowError):
+                    pass
+
+            expiration_dt_str = item.get("job_offer_expiration_datetime_utc")
+            if expiration_dt_str and isinstance(expiration_dt_str, str):
+                try:
+                    exp_dt = datetime.fromisoformat(expiration_dt_str.replace("Z", "+00:00"))
+                    if exp_dt < now_utc:
+                        continue
+                except ValueError:
+                    pass
+
             title = item.get("job_title", "")
             company = item.get("employer_name", "Confidential")
             city = item.get("job_city", "")
@@ -135,6 +162,7 @@ class JSearchClient:
             # Parse salary if available
             salary_min = item.get("job_min_salary")
             salary_max = item.get("job_max_salary")
+            posted_at = item.get("job_posted_at_datetime_utc")
 
             normalized.append({
                 "id": ext_id,
@@ -149,6 +177,10 @@ class JSearchClient:
                 "redirect_url": apply_url,
                 "description": description,
                 "extracted_skills": skills,
+                "posted_at": posted_at,
+                "is_active": True,
+                "is_closed": False,
+                "job_offer_expiration_datetime_utc": expiration_dt_str,
             })
 
         return normalized

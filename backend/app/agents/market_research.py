@@ -22,7 +22,8 @@ class SearchIntent(BaseModel):
 
 INTENT_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """You are an expert job search intent analyzer specializing in the Egypt and MENA technical market.
-Extract the target role keywords, location (default to 'Egypt' if unspecified), and remote preference from the user's query.
+Extract the target role keywords in clean, standard English (e.g., 'Junior AI Engineer', 'Python Backend Developer', 'Data Scientist'), location (default to 'Egypt' if unspecified), and remote preference from the user's query.
+Never output directory search phrases like '150 jobs' or Arabic phrases. Always extract canonical technical role keywords.
 If the query is general (e.g., 'find jobs for me', 'show openings'), infill with the candidate's target role and preferences.
 """),
     ("human", """User Query: {query}
